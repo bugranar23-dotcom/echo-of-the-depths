@@ -997,6 +997,91 @@ def decorate_rooms(style: dict, wall_tex, metal_tex):
             build_clockwork(px, pz, hx("#b99b62"), hx("#e6c777"))
 
 
+def decorate_story_details(style: dict, wall_alt_tex, metal_tex):
+    """Chapter-specific environmental storytelling props and readable edge clutter."""
+    rng = random.Random(8800 + chapter_index * 131)
+    mode = style["room_style"]
+    for room in range(2, GRID * GRID - 2):
+        if rng.random() > .62:
+            continue
+        cx, cz = room_center(room)
+        side = rng.choice(("west", "east", "north", "south"))
+        zoff = rng.uniform(-2.4, 2.4)
+        xoff = rng.uniform(-2.4, 2.4)
+        if side == "west":
+            px, pz = cx - 5.72, cz + zoff
+            frame_scale = (.10, 1.25, 1.05)
+            inner = (px + .07, 1.95, pz)
+        elif side == "east":
+            px, pz = cx + 5.72, cz + zoff
+            frame_scale = (.10, 1.25, 1.05)
+            inner = (px - .07, 1.95, pz)
+        elif side == "north":
+            px, pz = cx + xoff, cz - 5.72
+            frame_scale = (1.25, 1.25, .10)
+            inner = (px, 1.95, pz + .07)
+        else:
+            px, pz = cx + xoff, cz + 5.72
+            frame_scale = (1.25, 1.25, .10)
+            inner = (px, 1.95, pz - .07)
+
+        add_box(px, 1.95, pz, *frame_scale, style["trim"], metal_tex)
+        ix, iy, iz = inner
+        panel_scale = (.055, .94, .76) if side in ("west", "east") else (.76, .94, .055)
+        panel_tint = {
+            "wood": hx("#241b18"), "tile": hx("#182624"),
+            "bark": hx("#1c2419"), "concrete": hx("#181d24"),
+            "clock": hx("#211b28")
+        }[mode]
+        add_box(ix, iy, iz, *panel_scale, panel_tint, wall_alt_tex)
+
+        if mode == "wood":  # Faded family portrait / torn wallpaper.
+            accent = hx("#a78a62")
+            for dy in (-.24, 0, .24):
+                if side in ("west", "east"):
+                    add_box(ix, iy + dy, iz, .035, .025, .48, accent)
+                else:
+                    add_box(ix, iy + dy, iz, .48, .025, .035, accent)
+            add_box(ix, iy, iz, .025, .62, .025, hx("#514038"))
+        elif mode == "tile":  # Room indicator and broken call button.
+            for dy, tint in ((.27, hx("#4e8d7e")), (.02, hx("#a1a891")), (-.23, hx("#5d6a64"))):
+                if side in ("west", "east"):
+                    add_box(ix, iy + dy, iz, .025, .045, .38, tint)
+                else:
+                    add_box(ix, iy + dy, iz, .38, .045, .025, tint)
+            add_cylinder(ix, iy - .40, iz, (.09, .08, .09), hx("#bd705b"))
+        elif mode == "bark":  # Ranger station map / signal bars.
+            for k in range(4):
+                offset = -.27 + k * .18
+                if side in ("west", "east"):
+                    add_box(ix, iy + offset, iz, .03, .035, .45, hx("#788b56"))
+                else:
+                    add_box(ix, iy + offset, iz, .45, .035, .03, hx("#788b56"))
+            add_cylinder(ix, iy, iz, (.12, .08, .12), style["glow"])
+        elif mode == "concrete":  # Pressure gauge and emergency stripes.
+            add_cylinder(ix, iy, iz, (.24, .12, .24), hx("#87919a"),
+                         rotation=(90, 0, 0) if side in ("west", "east") else (0, 0, 90))
+            for offset in (-.31, .31):
+                if side in ("west", "east"):
+                    add_box(ix, iy + offset, iz, .035, .035, .55, hx("#a16a41"))
+                else:
+                    add_box(ix, iy + offset, iz, .55, .035, .035, hx("#a16a41"))
+        else:  # Clockmaker's dial.
+            make_ring(ix, iy, iz, .30, hx("#b2945e"), thickness=.035,
+                      rotation=(90, 0, 0) if side in ("west", "east") else (0, 0, 90))
+            add_cylinder(ix, iy, iz, (.055, .48, .055), hx("#d0b477"),
+                         rotation=(0, 0, 90))
+
+        # Small debris sits along room edges; the walkable centre stays clear.
+        if rng.random() < .48:
+            for _ in range(rng.randrange(2, 5)):
+                dx = rng.choice((-4.7, 4.7))
+                dz = rng.uniform(-4.2, 4.2)
+                add_box(cx + dx, .10, cz + dz, rng.uniform(.28, .8), .16,
+                        rng.uniform(.14, .34), hx("#3b342d"), metal_tex,
+                        rotation_y=rng.uniform(-35, 35))
+
+
 def build_lamps(style: dict):
     global room_lights
     room_lights = []
@@ -1171,6 +1256,7 @@ def build_world():
                 make_wall_segment("x", fixed, start, end, wall_tex, style["trim"], metal_tex, wall_alt_tex)
 
     decorate_rooms(style, wall_tex, metal_tex)
+    decorate_story_details(style, wall_alt_tex, metal_tex)
     build_lamps(style)
     console_pos, exit_pos = build_exit_gate(style)
     return console_pos
