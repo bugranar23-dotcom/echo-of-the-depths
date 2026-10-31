@@ -88,7 +88,7 @@ hx = color.hex
 CHAPTERS = [
     {
         "name": "KARANLIK MALIKANE", "subtitle": "Bolum 1 / Uyanis",
-        "story": "Eski guc panelini calistir. Ana cikisa giden kilidi ac.",
+        "story": "Firtinali bir gecede terk edilmis malikanede uyandin. Dis kapi zincirli; eski guc panelinin izini bul.",
         "item": "sigorta", "item_name": "Sigorta", "required": 5,
         "gate": "Ana kapi", "gate_text": "5 sigortayi panele yerlestir ve ana kapidan cik.",
         "wall": (82, 57, 43), "floor": (57, 38, 29), "trim": (135, 91, 55),
@@ -99,7 +99,7 @@ CHAPTERS = [
     },
     {
         "name": "KAPATILMIS HASTANE", "subtitle": "Bolum 2 / Arsiv",
-        "story": "Hasta arsivindeki 5 veri diskini bul. Asansor sistemini yeniden baslat.",
+        "story": "Hastanenin koridorlari bos, ama hemsire cagrilari hala calisiyor. Arsiv kayitlarini bulup asansore guc ver.",
         "item": "disk", "item_name": "Veri diski", "required": 5,
         "gate": "Asansor", "gate_text": "Bes veri diskini arsiv konsoluna tak ve asansore bin.",
         "wall": (91, 101, 99), "floor": (48, 58, 57), "trim": (130, 160, 151),
@@ -110,7 +110,7 @@ CHAPTERS = [
     },
     {
         "name": "SISLI ORMAN ISTASYONU", "subtitle": "Bolum 3 / Yanki",
-        "story": "Orman istasyonundaki 5 sinyal rolesini topla. Vericiyi etkinlestir.",
+        "story": "Sisin icinde istasyonun kirmizi isigi yanip sonuyor. Eski vericiyi uyandiracak parcalari ara.",
         "item": "role", "item_name": "Sinyal rolesi", "required": 5,
         "gate": "Verici kapisi", "gate_text": "Tum rolesleri vericiye tak ve disari giden sinyali ac.",
         "wall": (62, 79, 60), "floor": (42, 57, 39), "trim": (113, 128, 76),
@@ -121,7 +121,7 @@ CHAPTERS = [
     },
     {
         "name": "YERALTI SIGINAGI", "subtitle": "Bolum 4 / Basinc",
-        "story": "Siginagin derinliklerinde 5 basinc vanasini bul. Celik kapinin kilidini dusur.",
+        "story": "Yeraltindaki basinc sistemi kendi kendine calisiyor. Siginak kapisi kapanmadan kontrol odasina ulas.",
         "item": "vana", "item_name": "Basinc vanasi", "required": 5,
         "gate": "Celik kapi", "gate_text": "Bes vanayi kontrol konsoluna yerlestir ve celik kapidan gec.",
         "wall": (78, 82, 91), "floor": (39, 43, 51), "trim": (139, 146, 151),
@@ -132,7 +132,7 @@ CHAPTERS = [
     },
     {
         "name": "SAAT KULESI", "subtitle": "Bolum 5 / Son Yanki",
-        "story": "Saatin 6 kayip parcasini bul. Mekanizmayi calistir ve son cikisa ulas.",
+        "story": "Saat kulesi yillardir durmustu. Simdi her katinda ayni tikirti var; son mekanizmayi tamamla.",
         "item": "parca", "item_name": "Saat parcasi", "required": 6,
         "gate": "Son kapi", "gate_text": "Alti parcayi saate yerlestir. Son kapiyi ac.",
         "wall": (67, 57, 79), "floor": (41, 34, 56), "trim": (168, 135, 83),
@@ -1710,6 +1710,15 @@ def next_chapter():
     start_chapter()
 
 
+def start_room_yaw() -> float:
+    """Face the first real doorway so the opening view shows the playable corridor."""
+    if not room_graph or not room_graph[0]:
+        return 0.0
+    nx, nz = room_center(room_graph[0][0])
+    sx, sz = room_center(0)
+    return math.degrees(math.atan2(nx - sx, nz - sz))
+
+
 def start_chapter():
     global chapter_items_collected, battery_charge, flashlight_on, crouching, stamina
     global exhausted, chapter_clock, spawn_clock, enemy, enemy_state, caught_lock, chapter_intro, camera_pitch, show_map
@@ -1740,7 +1749,7 @@ def start_chapter():
     make_enemy(style)
     enemy_state = "dormant"
     player.position = (CELL / 2, 0, CELL / 2)
-    player.rotation_y = 0
+    player.rotation_y = start_room_yaw()
     update_room_streaming(force=True)
     camera.position = (0, 1.68, 0)
     camera.rotation = (0, 0, 0)
@@ -1799,7 +1808,7 @@ def caught_by_enemy():
             enemy.state = "dormant"
             enemy.spawn_countdown = max(18, CHAPTERS[chapter_index]["spawn"] * .55)
         player.position = (CELL / 2, 0, CELL / 2)
-        player.rotation_y = 0
+        player.rotation_y = start_room_yaw()
         camera.position = (0, 1.68, 0)
         card_back.enabled = card_title.enabled = card_body.enabled = card_sub.enabled = False
         fade.animate("alpha", 0, duration=.9)
