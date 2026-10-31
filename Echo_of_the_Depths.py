@@ -15,6 +15,19 @@ import traceback
 import threading
 from collections import deque
 
+if sys.version_info < (3, 12):
+    message = (f"Bu oyun icin Python 3.12 veya daha yenisi gerekiyor. Su anki surum: "
+               f"{sys.version.split()[0]}")
+    print(message)
+    try:
+        log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "echo_hata.txt")
+        with open(log_path, "w", encoding="utf-8") as log:
+            log.write(message + "\n")
+    except OSError:
+        pass
+    input("Cikmak icin Enter...")
+    raise SystemExit(1)
+
 try:
     from ursina import *
     from panda3d.core import (
@@ -121,7 +134,8 @@ CHAPTERS = [
 # -----------------------------------------------------------------------------
 # Dokular ve sesler: harici gorsel dosyasi gerektirmez.
 # -----------------------------------------------------------------------------
-ASSET_DIR = "echo_assets"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ASSET_DIR = os.path.join(BASE_DIR, "echo_assets")
 TEX_DIR = os.path.join(ASSET_DIR, "textures")
 SFX_DIR = os.path.join(ASSET_DIR, "audio")
 os.makedirs(TEX_DIR, exist_ok=True)
@@ -321,7 +335,7 @@ startup_panel = Entity(parent=camera.ui, model="quad", scale=(1.65, .52),
                         color=color.rgba(5, 8, 10, 238), z=-1)
 startup_title = Text(parent=camera.ui, text=APP_NAME, origin=(0, 0),
                      position=(0, .075), scale=1.45, color=hx("#e5d1a2"))
-startup_message = Text(parent=camera.ui, text="Dokular ve sesler hazirlaniyor...",
+startup_message = Text(parent=camera.ui, text="Ilk bolumun dosyalari hazirlaniyor...",
                        origin=(0, 0), position=(0, -.075), scale=.82,
                        color=hx("#bdc4b5"))
 
@@ -1281,15 +1295,22 @@ def input(key):
 
 
 def prepare_startup_assets() -> None:
-    """Tum bolum dokularini ve sesleri pencere acikken arka planda hazirla."""
+    """Yalnizca ilk bolumun dosyalarini arka planda hazirla.
+
+    Diger bolumlerin dokulari o bolume gecildiginde olusturulur. Boylece
+    ilk acilista bes bolumun tum dosyalarini beklemek gerekmez.
+    """
     try:
-        for index, style in enumerate(CHAPTERS, start=1):
-            build_chapter_textures(index, style)
+        build_chapter_textures(1, CHAPTERS[0])
         build_audio_files()
     except Exception:
-        # Yukleme hatasi oyunu sessizce kilitlemesin; ana thread hata kaydini
-        # olustururken yine de baslatmayi deneyecek.
         traceback.print_exc()
+        try:
+            with open(os.path.join(BASE_DIR, "echo_hata.txt"), "w", encoding="utf-8") as error_file:
+                error_file.write("Baslangic dosyalari hazirlanirken hata olustu.\n")
+                traceback.print_exc(file=error_file)
+        except OSError:
+            pass
     finally:
         startup_assets_ready.set()
 
@@ -1301,9 +1322,12 @@ def begin_startup() -> None:
         return
     startup_started = True
     startup_message.text = "Ilk bolum olusturuluyor..."
+    print("[ECHO] Ses sistemi hazirlaniyor...", flush=True)
     try:
         initialize_audio()
+        print("[ECHO] Malikane haritasi ve modeller olusturuluyor...", flush=True)
         start_chapter()
+        print("[ECHO] Ilk bolum hazir.", flush=True)
         startup_panel.enabled = False
         startup_title.enabled = False
         startup_message.enabled = False
@@ -1311,7 +1335,7 @@ def begin_startup() -> None:
         print("\nOYUN BASLATILAMADI:\n")
         traceback.print_exc()
         try:
-            with open("echo_hata.txt", "w", encoding="utf-8") as error_file:
+            with open(os.path.join(BASE_DIR, "echo_hata.txt"), "w", encoding="utf-8") as error_file:
                 traceback.print_exc(file=error_file)
         except Exception:
             pass
@@ -1447,8 +1471,7 @@ def update():
 # Baslat
 # -----------------------------------------------------------------------------
 try:
-    # Agir doku/ses uretimini arka plana al. start_chapter artik app.run'dan
-    # once cagrilmaz; pencere ve yukleme ekrani hemen gorunur.
+    # Yalnizca ilk bolum varliklari arka planda hazirlanir. Pencere hemen gorunur.
     asset_thread = threading.Thread(
         target=prepare_startup_assets,
         name="EchoAssetPreloader",
@@ -1460,7 +1483,7 @@ except Exception:
     print("\nOYUNDA BIR HATA OLUSTU:\n")
     traceback.print_exc()
     try:
-        with open("echo_hata.txt", "w", encoding="utf-8") as error_file:
+        with open(os.path.join(BASE_DIR, "echo_hata.txt"), "w", encoding="utf-8") as error_file:
             traceback.print_exc(file=error_file)
     except Exception:
         pass
