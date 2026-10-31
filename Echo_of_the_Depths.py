@@ -1686,7 +1686,7 @@ def next_chapter():
 def start_chapter():
     global chapter_items_collected, battery_charge, flashlight_on, crouching, stamina
     global exhausted, chapter_clock, spawn_clock, enemy, enemy_state, caught_lock, chapter_intro, camera_pitch, show_map
-    global puzzle_active, puzzle_solved, puzzle_entry, escape_active, escape_timer
+    global puzzle_active, puzzle_solved, puzzle_entry, escape_active, escape_timer, ambient_event_timer
     chapter_items_collected = 0
     battery_charge = 100.0 if chapter_index == 0 else min(100.0, battery_charge + 15)
     flashlight_on = False
@@ -2281,7 +2281,9 @@ if "--generate-textures" in sys.argv:
     for texture_index, texture_style in enumerate(CHAPTERS, start=1):
         print(f"[TEXTURE] {texture_index}/5 {texture_style['name']}", flush=True)
         build_chapter_textures(texture_index, texture_style)
-    print(f"[TEXTURE] Tum bolum dokulari hazir: {TEX_DIR}", flush=True)
+        build_chapter_detail_textures(texture_index, texture_style)
+    build_jumpscare_texture()
+    print(f"[TEXTURE] Bes bolumun duvar, varyasyon, zemin, tavan ve metal dokulari hazir: {TEX_DIR}", flush=True)
     raise SystemExit(0)
 
 try:
