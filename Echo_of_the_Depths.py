@@ -14,6 +14,7 @@ import wave
 import struct
 import traceback
 import threading
+from pathlib import Path
 from collections import deque
 
 if sys.version_info < (3, 12):
@@ -878,9 +879,18 @@ def build_world():
     lamp_refresh_timer = 0.0
     style = CHAPTERS[chapter_index]
     wall_path, floor_path, metal_path = build_chapter_textures(chapter_index + 1, style)
-    wall_tex = load_texture(wall_path)
-    floor_tex = load_texture(floor_path)
-    metal_tex = load_texture(metal_path)
+    # Ursina load_texture searches relative to asset_folder; an absolute
+    # filename silently returned None on some installations. Specify the
+    # texture directory explicitly so all generated PNGs are actually loaded.
+    texture_folder = Path(TEX_DIR)
+    wall_tex = load_texture(os.path.basename(wall_path), folder=texture_folder)
+    floor_tex = load_texture(os.path.basename(floor_path), folder=texture_folder)
+    metal_tex = load_texture(os.path.basename(metal_path), folder=texture_folder)
+    if not all((wall_tex, floor_tex, metal_tex)):
+        missing = [name for name, tex in (
+            ("wall", wall_tex), ("floor", floor_tex), ("metal", metal_tex)
+        ) if tex is None]
+        raise RuntimeError("Doku dosyalari yuklenemedi: " + ", ".join(missing))
     make_maze()
     # Chunk'lar once gorunur kurulur. Ilk stream turu oyuncu konumuna gore
     # guvenli alanlari acik birakir; kapali parent nedeniyle bos/beyaz sahne olusmaz.
