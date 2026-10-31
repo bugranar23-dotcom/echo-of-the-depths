@@ -30,12 +30,17 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt mss
 
+      - name: Generate all five chapters' texture maps
+        run: |
+          xvfb-run -a python Echo_of_the_Depths.py --generate-textures
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+
       - name: Launch game and capture a real rendered frame
         run: |
           xvfb-run -a -s "-screen 0 1600x900x24" python tools/visual_smoke.py
         env:
           LIBGL_ALWAYS_SOFTWARE: "1"
-          ECHO_VISUAL_DEBUG: "1"
 
       - name: Save screenshot and logs
         if: always()
@@ -46,5 +51,6 @@ jobs:
             visual-smoke.png
             visual-smoke.log
             echo_hata.txt
+            echo_assets/textures/*.png
           if-no-files-found: warn
           retention-days: 7
