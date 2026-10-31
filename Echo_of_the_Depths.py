@@ -190,9 +190,9 @@ def _shade(rgb, delta):
 
 def build_chapter_textures(chapter_index: int, style: dict) -> tuple[str, str, str]:
     """Bolume gore 512px, katmanli ve tekrar edilebilir duvar/zemin/metal dokulari."""
-    wall_path = os.path.join(TEX_DIR, f"wall_{chapter_index}_v6.png")
-    floor_path = os.path.join(TEX_DIR, f"floor_{chapter_index}_v6.png")
-    metal_path = os.path.join(TEX_DIR, f"metal_{chapter_index}_v6.png")
+    wall_path = os.path.join(TEX_DIR, f"wall_{chapter_index}_v7.png")
+    floor_path = os.path.join(TEX_DIR, f"floor_{chapter_index}_v7.png")
+    metal_path = os.path.join(TEX_DIR, f"metal_{chapter_index}_v7.png")
     if all(os.path.exists(p) and os.path.getsize(p) > 12000 for p in (wall_path, floor_path, metal_path)):
         return wall_path, floor_path, metal_path
 
@@ -217,8 +217,8 @@ def build_chapter_textures(chapter_index: int, style: dict) -> tuple[str, str, s
             if y % 128 == 0:
                 x = random.randrange(35, size - 55)
                 yy = y + random.randrange(12, 52)
-                d.ellipse((x, yy, x + 34, yy + 13), outline=_shade(wc, -38), width=3)
-                d.ellipse((x + 8, yy + 3, x + 25, yy + 10), outline=_shade(wc, 23), width=1)
+                d.ellipse((x, yy, x + 23, yy + 8), outline=_shade(wc, -23), width=2)
+                d.arc((x + 4, yy + 2, x + 18, yy + 7), 15, 330, fill=_shade(wc, 12), width=1)
         for x in range(18, size, 128):
             for y in range(28, size, 128):
                 d.ellipse((x - 3, y - 3, x + 3, y + 3), fill=_shade(tc, -25))
@@ -232,19 +232,21 @@ def build_chapter_textures(chapter_index: int, style: dict) -> tuple[str, str, s
                 d.line((x + 3, y + 3, x + tile_w - 4, y + 3), fill=_shade(base, 24), width=2)
                 d.line((x + 3, y + 3, x + 3, y + tile_h - 4), fill=_shade(base, 15), width=2)
                 d.line((x + 3, y + tile_h - 4, x + tile_w - 4, y + tile_h - 4), fill=_shade(base, -28), width=2)
-        for _ in range(32):
+        for _ in range(150):
             x, y = random.randrange(size), random.randrange(size)
-            r = random.randrange(3, 15)
-            d.ellipse((x-r, y-r, x+r, y+r), fill=_shade(wc, random.choice((-25, -18, 14))))
+            r = random.randrange(1, 4)
+            d.ellipse((x-r, y-r, x+r, y+r), fill=_shade(wc, random.choice((-12, -7, 5))))
     elif mode == "bark":
         for x in range(-12, size + 16, 30):
             xx = x + random.randint(-8, 8)
             d.line((xx, 0, xx + random.randint(-12, 12), size), fill=_shade(wc, random.randint(-31, -15)), width=random.randint(3, 7))
             d.line((xx + 8, 0, xx + random.randint(2, 15), size), fill=_shade(wc, random.randint(10, 24)), width=2)
-        for _ in range(65):
+        for _ in range(260):
             x, y = random.randrange(size), random.randrange(size)
-            rx, ry = random.randrange(2, 13), random.randrange(3, 19)
-            d.ellipse((x-rx, y-ry, x+rx, y+ry), fill=_shade(wc, random.choice((-26, -18, 15, 22))))
+            length = random.randrange(3, 18)
+            tint = random.choice((-24, -16, -8, 7, 12))
+            d.line((x, y, min(size-1, x + random.randint(-3, 3)), min(size-1, y + length)),
+                   fill=_shade(wc, tint), width=random.choice((1, 1, 2)))
         for y in (90, 285, 450):
             d.line((0, y, size, y + random.randint(-8, 8)), fill=_shade(wc, -35), width=5)
     elif mode == "concrete":
@@ -257,10 +259,10 @@ def build_chapter_textures(chapter_index: int, style: dict) -> tuple[str, str, s
             x, y = random.randrange(size), random.randrange(size)
             length = random.randrange(10, 65)
             d.line((x, y, x + random.randrange(-14, 14), y + length), fill=_shade(wc, random.choice((-38, -28, 18))), width=1)
-        for _ in range(65):
+        for _ in range(230):
             x, y = random.randrange(size), random.randrange(size)
-            r = random.randrange(2, 7)
-            d.ellipse((x-r, y-r, x+r, y+r), fill=_shade(wc, random.choice((-29, -18, 20))))
+            r = random.choice((1, 1, 2))
+            d.ellipse((x-r, y-r, x+r, y+r), fill=_shade(wc, random.choice((-18, -11, -5, 7))))
     else:  # saat kulesi: koyu lake ahsap + ince pirinc citalar
         for y in range(0, size, 96):
             d.rectangle((0, y, size, y + 92), fill=_shade(wc, random.randint(-8, 8)))
@@ -270,11 +272,16 @@ def build_chapter_textures(chapter_index: int, style: dict) -> tuple[str, str, s
                 d.rectangle((x, y + 16, x + 78, y + 78), outline=_shade(tc, -3), width=3)
                 d.ellipse((x + 22, y + 32, x + 56, y + 66), outline=_shade(tc, 16), width=2)
 
-    # Nem lekeleri ve ince kir tabakasi: tekrar eden dokunun duz gorunmesini onler.
-    for _ in range(45 if mode in ("tile", "concrete", "bark") else 22):
+    # Soft damp discoloration patches are blurred so they read as stains, not spots.
+    stain_layer = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    stain_draw = ImageDraw.Draw(stain_layer)
+    for _ in range(34 if mode in ("tile", "concrete", "bark") else 20):
         x, y = random.randrange(size), random.randrange(size)
-        rx, ry = random.randrange(5, 32), random.randrange(4, 24)
-        d.ellipse((x-rx, y-ry, x+rx, y+ry), fill=_shade(wc, random.choice((-24, -15, 12))))
+        rx, ry = random.randrange(10, 42), random.randrange(6, 28)
+        shade = random.choice(((7, 5, 4, 19), (0, 0, 0, 17), (166, 144, 111, 10)))
+        stain_draw.ellipse((x-rx, y-ry, x+rx, y+ry), fill=shade)
+    stain_layer = stain_layer.filter(ImageFilter.GaussianBlur(9))
+    wall = Image.alpha_composite(wall.convert("RGBA"), stain_layer).convert("RGB")
     # Fine scratches and hairline cracks are baked into the image (no frame cost).
     for _ in range(150):
         x, y = random.randrange(size), random.randrange(size)
@@ -344,8 +351,8 @@ def build_chapter_textures(chapter_index: int, style: dict) -> tuple[str, str, s
 
 def build_chapter_detail_textures(chapter_index: int, style: dict) -> tuple[str, str]:
     """Create a distinct damaged wall variant and a chapter-specific ceiling."""
-    alt_path = os.path.join(TEX_DIR, f"wall_alt_{chapter_index}_v6.png")
-    ceiling_path = os.path.join(TEX_DIR, f"ceiling_{chapter_index}_v6.png")
+    alt_path = os.path.join(TEX_DIR, f"wall_alt_{chapter_index}_v7.png")
+    ceiling_path = os.path.join(TEX_DIR, f"ceiling_{chapter_index}_v7.png")
     if all(os.path.exists(p) and os.path.getsize(p) > 9000 for p in (alt_path, ceiling_path)):
         return alt_path, ceiling_path
 
@@ -366,11 +373,19 @@ def build_chapter_detail_textures(chapter_index: int, style: dict) -> tuple[str,
             for x in range(rng.randrange(12, 42), size, 96):
                 d.rectangle((x, y + 8, min(size, x + rng.randrange(28, 70)), y + 68),
                             fill=_shade(base, rng.choice((-20, -12, 9))))
-        for _ in range(26):
+        for _ in range(12):
             x, y = rng.randrange(size), rng.randrange(size)
-            d.polygon([(x, y), (min(size-1, x+40), y+6),
-                       (min(size-1, x+24), min(size-1, y+55))],
-                      fill=_shade(wc, -37))
+            width = rng.randrange(18, 76)
+            height = rng.randrange(24, 90)
+            x2, y2 = min(size-1, x+width), min(size-1, y+height)
+            d.rectangle((x, y, x2, y2), fill=_shade(wc, rng.choice((-24, -17, -10))))
+            seam = [(x, y2-rng.randrange(2, 8))]
+            for step in range(1, 7):
+                px = x + int(width * step / 6)
+                py = y2 + rng.randrange(-5, 5)
+                seam.append((min(size-1, px), max(0, min(size-1, py))))
+            d.line(seam, fill=_shade(wc, -38), width=2)
+            d.line((x+3, y+4, x2-3, y+4), fill=_shade(wc, 9), width=1)
     elif mode == "tile":
         # Hospital wall: glazed tiles, discoloured grout and fine cracks.
         for y in range(0, size, 72):
@@ -428,10 +443,15 @@ def build_chapter_detail_textures(chapter_index: int, style: dict) -> tuple[str,
                 d.ellipse((x+21, y+24, x+51, y+54), outline=_shade(tc, -8), width=2)
                 d.ellipse((x+33, y+36, x+39, y+42), fill=_shade(tc, 20))
 
-    for _ in range(100):
+    for _ in range(320):
         x, y = rng.randrange(size), rng.randrange(size)
-        r = rng.randrange(2, 15)
-        d.ellipse((x-r, y-r, x+r, y+r), fill=_shade(wc, rng.choice((-40, -26, -14, 10))))
+        r = rng.choice((1, 1, 2, 3))
+        d.ellipse((x-r, y-r, x+r, y+r), fill=_shade(wc, rng.choice((-21, -14, -8, 5))))
+    for _ in range(85):
+        x, y = rng.randrange(size), rng.randrange(size)
+        length = rng.randrange(4, 34)
+        d.line((x, y, min(size-1, x+length), min(size-1, y+rng.randrange(-2, 3))),
+               fill=_shade(wc, rng.choice((-28, -17, 8))), width=1)
     blend_noise(alt, .16).save(alt_path, optimize=True)
 
     # Ceiling is a separate material, never another copy of the wall.
