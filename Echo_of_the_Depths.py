@@ -377,10 +377,16 @@ def build_chapter_detail_textures(chapter_index: int, style: dict) -> tuple[str,
             offset = 0 if (y // 72) % 2 == 0 else 36
             for x in range(-72 + offset, size, 72):
                 x0, x1 = max(0, x+3), min(size-1, x+67)
-                d.rounded_rectangle((x0, y+3, x1, min(size-1, y+67)), radius=4,
+                if x1 <= x0:
+                    continue
+                y0, y1 = min(size-1, y+3), min(size-1, y+67)
+                if y1 <= y0:
+                    continue
+                d.rounded_rectangle((x0, y0, x1, y1), radius=4,
                                     fill=_shade(wc, rng.randint(-18, 5)),
                                     outline=_shade(wc, -39), width=3)
-                d.line((x0+5, y+8, x1-5, y+8), fill=_shade(wc, 19), width=2)
+                if x1 - x0 > 12:
+                    d.line((x0+5, y+8, x1-5, y+8), fill=_shade(wc, 19), width=2)
         for _ in range(20):
             x, y = rng.randrange(size), rng.randrange(size)
             d.line((x, y, min(size-1, x+rng.randrange(8, 42)),
