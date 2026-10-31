@@ -35,6 +35,7 @@ jobs:
           xvfb-run -a -s "-screen 0 1600x900x24" python tools/visual_smoke.py
         env:
           LIBGL_ALWAYS_SOFTWARE: "1"
+          ECHO_VISUAL_DEBUG: "1"
 
       - name: Save screenshot and logs
         if: always()
