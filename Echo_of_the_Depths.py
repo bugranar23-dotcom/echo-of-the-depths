@@ -1355,6 +1355,12 @@ def start_chapter():
     camera.position = (0, 1.68, 0)
     camera.rotation = (0, 0, 0)
     camera_pitch = 0
+    if os.environ.get("ECHO_VISUAL_DEBUG") == "1":
+        debug_pos = camera.world_position + camera.forward * 5.0
+        print(f"[ECHO DEBUG] camera={camera.world_position} forward={camera.forward} probe={debug_pos}", flush=True)
+        Entity(parent=scene, model="cube", name="visual-debug-forward-probe",
+               position=debug_pos, scale=(2.0, 2.0, 2.0),
+               color=color.rgb(180, 25, 25), unlit=True)
     scene.setFog(fog)
     fog.setColor(*(c / 255 for c in style["fog"]))
     fog.setExpDensity(.020 + chapter_index * .0025)
