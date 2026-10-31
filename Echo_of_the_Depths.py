@@ -42,6 +42,7 @@ try:
     # Ursina does not register a built-in model named "cylinder".
     # Use its procedural Cylinder mesh instead.
     from ursina.models.procedural.cylinder import Cylinder as UrsinaCylinder
+    from ursina.models.procedural.cone import Cone as UrsinaCone
 except ImportError as exc:
     print("Gerekli kutuphane bulunamadi:", exc)
     print("Terminalde su komutu calistir: py -m pip install ursina pillow")
@@ -50,6 +51,7 @@ except ImportError as exc:
 
 # Tek bir paylasilan, prosedurel silindir modeli; tum esyalar bunu kullanir.
 CYLINDER_MODEL = UrsinaCylinder(resolution=12, start=-0.5)
+CONE_MODEL = UrsinaCone(resolution=8, radius=0.5, height=1.0)
 
 # -----------------------------------------------------------------------------
 # Genel ayarlar
@@ -1073,7 +1075,7 @@ class Stalker:
             static_entity(parent=leg, model="cube", position=(0, -.36, 0), scale=(.18, .75, .19), color=skin)
             static_entity(parent=leg, model="cube", position=(0, -.78, .10), scale=(.22, .18, .40), color=dark)
         for side in (-1, 1):
-            static_entity(parent=self.torso, model="cone", position=(side * .23, .55, -.04), scale=(.14, .36, .14), rotation_z=side * 28, color=dark)
+            static_entity(parent=self.torso, model=CONE_MODEL, position=(side * .23, .55, -.04), scale=(.14, .36, .14), rotation_z=side * 28, color=dark)
         self.phase = 0.0
         self.state = "dormant"
         self.timer = 0.0
@@ -1337,7 +1339,7 @@ def start_chapter():
     camera.rotation = (0, 0, 0)
     camera_pitch = 0
     scene.setFog(fog)
-    fog.setColor(*(c / 255 for c in style["fog"]), 1.0)
+    fog.setColor(*(c / 255 for c in style["fog"]))
     fog.setExpDensity(.020 + chapter_index * .0025)
     amb = style["ambient"]
     ambient.setColor((min(1.0, amb[0] * 1.55 + .07), min(1.0, amb[1] * 1.55 + .07), min(1.0, amb[2] * 1.55 + .07), 1.0))
