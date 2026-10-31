@@ -891,9 +891,9 @@ def build_world():
     # CI visual diagnostic: a high-contrast wall in the player's direct view.
     # This is not present in normal gameplay.
     if os.environ.get("ECHO_VISUAL_DEBUG") == "1":
-        Entity(parent=scene, model="cube", name="visual-debug-wall",
-               position=(CELL / 2, 1.7, CELL + 1.0),
-               scale=(8.0, 3.4, .35), color=color.rgb(105, 35, 28))
+        Entity(parent=camera, model="cube", name="visual-debug-camera-wall",
+               position=(0, 0, 8.0), scale=(5.0, 3.2, .35),
+               color=color.rgb(105, 35, 28), unlit=True)
     wall_colliders = []
     furniture_colliders = []
     room_active = set()
