@@ -38,7 +38,7 @@ try:
         PerspectiveLens,
         Fog,
     )
-    from PIL import Image, ImageDraw, ImageChops
+    from PIL import Image, ImageDraw, ImageChops, ImageFilter
     # Ursina does not register a built-in model named "cylinder".
     # Use its procedural Cylinder mesh instead.
     from ursina.models.procedural.cylinder import Cylinder as UrsinaCylinder
@@ -68,7 +68,9 @@ random.seed()
 
 app = Ursina(title=APP_NAME)
 window.title = APP_NAME
-window.color = color.rgb(4, 5, 8)
+window.color = color.rgb(7, 10, 14)
+# Panda3D sahne temizleme rengini de ayarla; beyaz bos ekran gorunmesini engeller.
+application.base.setBackgroundColor(0.012, 0.018, 0.026, 1.0)
 window.fps_counter.enabled = True
 window.exit_button.visible = True
 window.vsync = True
@@ -150,87 +152,141 @@ os.makedirs(SFX_DIR, exist_ok=True)
 
 
 def blend_noise(img: Image.Image, amount: float = 0.12) -> Image.Image:
-    noise = Image.effect_noise(img.size, 24).convert("RGB")
-    return Image.blend(img.convert("RGB"), noise, amount)
+    noise = Image.effect_noise(img.size, 62).convert("RGB")
+    return Image.blend(img.convert("RGB"), noise, amount).filter(ImageFilter.GaussianBlur(0.18))
+
+
+def _shade(rgb, delta):
+    return tuple(max(0, min(255, int(c + delta))) for c in rgb)
 
 
 def build_chapter_textures(chapter_index: int, style: dict) -> tuple[str, str, str]:
-    """PIL ile bolume ozel duvar, zemin ve metal dokulari uretir."""
-    wall_path = os.path.join(TEX_DIR, f"wall_{chapter_index}.png")
-    floor_path = os.path.join(TEX_DIR, f"floor_{chapter_index}.png")
-    metal_path = os.path.join(TEX_DIR, f"metal_{chapter_index}.png")
-    if all(os.path.exists(p) for p in (wall_path, floor_path, metal_path)):
+    """Bolume gore 512px, katmanli ve tekrar edilebilir duvar/zemin/metal dokulari."""
+    wall_path = os.path.join(TEX_DIR, f"wall_{chapter_index}_v2.png")
+    floor_path = os.path.join(TEX_DIR, f"floor_{chapter_index}_v2.png")
+    metal_path = os.path.join(TEX_DIR, f"metal_{chapter_index}_v2.png")
+    if all(os.path.exists(p) and os.path.getsize(p) > 12000 for p in (wall_path, floor_path, metal_path)):
         return wall_path, floor_path, metal_path
 
-    wc = style["wall"]
-    fc = style["floor"]
-    tc = style["trim"]
-    wall = Image.new("RGB", (256, 256), wc)
+    size = 512
+    wc, fc, tc = style["wall"], style["floor"], style["trim"]
+    mode = style["room_style"]
+
+    wall = Image.new("RGB", (size, size), wc)
     d = ImageDraw.Draw(wall)
-    if style["room_style"] == "wood":
-        for x in range(0, 256, 32):
-            d.rectangle((x, 0, x + 4, 255), fill=tuple(max(0, c - 28) for c in wc))
-            d.line((x + 9, 0, x + 9, 255), fill=tuple(min(255, c + 13) for c in wc), width=1)
-        for y in (0, 82, 86, 250):
-            d.rectangle((0, y, 255, y + 4), fill=tc)
-        for x in range(12, 256, 64):
-            d.rectangle((x, 112, x + 43, 224), outline=tuple(max(0, c - 32) for c in wc), width=3)
-    elif style["room_style"] == "tile":
-        for y in range(0, 256, 32):
-            d.line((0, y, 256, y), fill=tuple(max(0, c - 25) for c in wc), width=2)
-            off = 0 if (y // 32) % 2 == 0 else 16
-            for x in range(off, 256, 32):
-                d.line((x, y, x, y + 32), fill=tuple(max(0, c - 25) for c in wc), width=2)
-        d.rectangle((0, 205, 255, 255), fill=tuple(max(0, c - 30) for c in wc))
-    elif style["room_style"] == "bark":
-        for x in range(-30, 280, 22):
-            d.line((x, 0, x + random.randint(-12, 12), 256), fill=tuple(max(0, c - 25) for c in wc), width=random.randint(2, 5))
-        for _ in range(45):
-            x, y = random.randrange(256), random.randrange(256)
-            d.ellipse((x, y, x + random.randrange(3, 9), y + random.randrange(3, 9)), fill=tuple(min(255, c + 17) for c in wc))
-    elif style["room_style"] == "concrete":
-        for y in range(0, 256, 64):
-            d.line((0, y, 256, y), fill=tuple(max(0, c - 28) for c in wc), width=3)
-        for _ in range(18):
-            x, y = random.randrange(256), random.randrange(256)
-            d.line((x, y, x + random.randrange(-20, 20), y + random.randrange(8, 28)), fill=tuple(min(255, c + 19) for c in wc), width=1)
-    else:
-        for x in range(0, 256, 64):
-            d.rectangle((x, 0, x + 3, 256), fill=tc)
-        for y in range(18, 256, 48):
-            d.line((0, y, 256, y), fill=tuple(max(0, c - 25) for c in wc), width=3)
-        for x in range(12, 256, 64):
-            d.ellipse((x, 25, x + 26, 51), outline=tc, width=2)
-    blend_noise(wall, .13).save(wall_path)
-
-    floor = Image.new("RGB", (256, 256), fc)
-    fd = ImageDraw.Draw(floor)
-    if style["room_style"] in ("wood", "bark"):
-        for y in range(0, 256, 32):
-            fd.line((0, y, 256, y), fill=tuple(max(0, c - 22) for c in fc), width=3)
-            for x in range((y // 32 % 2) * 48, 256, 96):
-                fd.line((x, y, x, y + 32), fill=tuple(max(0, c - 18) for c in fc), width=2)
+    if mode == "wood":
+        plank = 64
+        for y in range(0, size, plank):
+            base = _shade(wc, (-9, 3, 8, -4)[(y // plank) % 4])
+            d.rectangle((0, y, size, y + plank - 3), fill=base)
+            d.line((0, y, size, y), fill=_shade(wc, -34), width=4)
+            d.line((0, y + plank - 3, size, y + plank - 3), fill=_shade(wc, 20), width=2)
+            for _ in range(18):
+                x = random.randrange(size)
+                yy = y + random.randrange(5, plank - 5)
+                run = random.randrange(18, 130)
+                d.line((x, yy, min(size, x + run), yy + random.choice((-2, -1, 0, 1, 2))), fill=_shade(base, random.choice((-20, -13, 11, 16))), width=1)
+            if y % 128 == 0:
+                x = random.randrange(35, size - 55)
+                yy = y + random.randrange(12, 52)
+                d.ellipse((x, yy, x + 34, yy + 13), outline=_shade(wc, -38), width=3)
+                d.ellipse((x + 8, yy + 3, x + 25, yy + 10), outline=_shade(wc, 23), width=1)
+        for x in range(18, size, 128):
+            for y in range(28, size, 128):
+                d.ellipse((x - 3, y - 3, x + 3, y + 3), fill=_shade(tc, -25))
+        d.rectangle((0, 0, size - 1, size - 1), outline=_shade(tc, -20), width=5)
+    elif mode == "tile":
+        tile_w, tile_h = 64, 64
+        for y in range(0, size, tile_h):
+            for x in range(0, size, tile_w):
+                base = _shade(wc, random.randint(-8, 10))
+                d.rectangle((x + 2, y + 2, x + tile_w - 3, y + tile_h - 3), fill=base)
+                d.line((x + 3, y + 3, x + tile_w - 4, y + 3), fill=_shade(base, 24), width=2)
+                d.line((x + 3, y + 3, x + 3, y + tile_h - 4), fill=_shade(base, 15), width=2)
+                d.line((x + 3, y + tile_h - 4, x + tile_w - 4, y + tile_h - 4), fill=_shade(base, -28), width=2)
+        for _ in range(32):
+            x, y = random.randrange(size), random.randrange(size)
+            r = random.randrange(3, 15)
+            d.ellipse((x-r, y-r, x+r, y+r), fill=_shade(wc, random.choice((-25, -18, 14))))
+    elif mode == "bark":
+        for x in range(-12, size + 16, 30):
+            xx = x + random.randint(-8, 8)
+            d.line((xx, 0, xx + random.randint(-12, 12), size), fill=_shade(wc, random.randint(-31, -15)), width=random.randint(3, 7))
+            d.line((xx + 8, 0, xx + random.randint(2, 15), size), fill=_shade(wc, random.randint(10, 24)), width=2)
+        for _ in range(65):
+            x, y = random.randrange(size), random.randrange(size)
+            rx, ry = random.randrange(2, 13), random.randrange(3, 19)
+            d.ellipse((x-rx, y-ry, x+rx, y+ry), fill=_shade(wc, random.choice((-26, -18, 15, 22))))
+        for y in (90, 285, 450):
+            d.line((0, y, size, y + random.randint(-8, 8)), fill=_shade(wc, -35), width=5)
+    elif mode == "concrete":
+        for y in range(0, size, 128):
+            d.line((0, y, size, y), fill=_shade(wc, -27), width=4)
+            d.line((0, y + 5, size, y + 5), fill=_shade(wc, 16), width=2)
+        for x in (128, 384):
+            d.line((x, 0, x, size), fill=_shade(wc, -22), width=3)
         for _ in range(35):
-            x, y = random.randrange(256), random.randrange(256)
-            fd.line((x, y, x + random.randrange(12, 45), y + random.randrange(-3, 4)), fill=tuple(min(255, c + 14) for c in fc), width=1)
-    else:
-        for y in range(0, 256, 32):
-            fd.line((0, y, 256, y), fill=tuple(min(255, c + 20) for c in fc), width=2)
-            off = (y // 32 % 2) * 16
-            for x in range(off, 256, 32):
-                fd.line((x, y, x, y + 32), fill=tuple(min(255, c + 20) for c in fc), width=2)
-        for x in range(6, 256, 64):
-            fd.ellipse((x, 7, x + 4, 11), fill=tc)
-    blend_noise(floor, .10).save(floor_path)
+            x, y = random.randrange(size), random.randrange(size)
+            length = random.randrange(10, 65)
+            d.line((x, y, x + random.randrange(-14, 14), y + length), fill=_shade(wc, random.choice((-38, -28, 18))), width=1)
+        for _ in range(65):
+            x, y = random.randrange(size), random.randrange(size)
+            r = random.randrange(2, 7)
+            d.ellipse((x-r, y-r, x+r, y+r), fill=_shade(wc, random.choice((-29, -18, 20))))
+    else:  # saat kulesi: koyu lake ahsap + ince pirinc citalar
+        for y in range(0, size, 96):
+            d.rectangle((0, y, size, y + 92), fill=_shade(wc, random.randint(-8, 8)))
+            d.line((0, y, size, y), fill=_shade(tc, -20), width=5)
+            d.line((0, y + 5, size, y + 5), fill=_shade(tc, 12), width=2)
+            for x in range(36, size, 128):
+                d.rectangle((x, y + 16, x + 78, y + 78), outline=_shade(tc, -3), width=3)
+                d.ellipse((x + 22, y + 32, x + 56, y + 66), outline=_shade(tc, 16), width=2)
 
-    metal = Image.new("RGB", (128, 128), tuple(min(255, c + 12) for c in tc))
+    # Nem lekeleri ve ince kir tabakasi: tekrar eden dokunun duz gorunmesini onler.
+    for _ in range(45 if mode in ("tile", "concrete", "bark") else 22):
+        x, y = random.randrange(size), random.randrange(size)
+        rx, ry = random.randrange(5, 32), random.randrange(4, 24)
+        d.ellipse((x-rx, y-ry, x+rx, y+ry), fill=_shade(wc, random.choice((-24, -15, 12))))
+    blend_noise(wall, .10).save(wall_path, optimize=True)
+
+    floor = Image.new("RGB", (size, size), fc)
+    fd = ImageDraw.Draw(floor)
+    if mode in ("wood", "bark", "clock"):
+        for y in range(0, size, 48):
+            fd.rectangle((0, y, size, y + 45), fill=_shade(fc, random.randint(-8, 9)))
+            fd.line((0, y, size, y), fill=_shade(fc, -35), width=4)
+            fd.line((0, y + 44, size, y + 44), fill=_shade(fc, 19), width=2)
+            for x in range((y // 48 % 2) * 80, size, 160):
+                fd.line((x, y, x, y + 45), fill=_shade(fc, -22), width=2)
+            for _ in range(12):
+                x = random.randrange(size)
+                yy = y + random.randrange(4, 42)
+                fd.line((x, yy, min(size, x + random.randrange(12, 90)), yy + random.randint(-1, 1)), fill=_shade(fc, random.choice((-24, -12, 14))), width=1)
+    else:
+        for y in range(0, size, 64):
+            for x in range(0, size, 64):
+                base = _shade(fc, random.randint(-7, 8))
+                fd.rectangle((x + 2, y + 2, x + 62, y + 62), fill=base)
+                fd.line((x + 3, y + 3, x + 61, y + 3), fill=_shade(base, 17), width=2)
+                fd.line((x + 3, y + 61, x + 61, y + 61), fill=_shade(base, -24), width=2)
+        for _ in range(50):
+            x, y = random.randrange(size), random.randrange(size)
+            r = random.randrange(2, 10)
+            fd.ellipse((x-r, y-r, x+r, y+r), fill=_shade(fc, random.choice((-30, -18, 17))))
+    blend_noise(floor, .085).save(floor_path, optimize=True)
+
+    metal = Image.new("RGB", (size, size), _shade(tc, -8))
     md = ImageDraw.Draw(metal)
-    for y in range(0, 128, 12):
-        md.line((0, y, 128, y), fill=tuple(max(0, c - 35) for c in tc), width=2)
-    for x in (9, 118):
-        for y in (9, 118):
-            md.ellipse((x - 3, y - 3, x + 3, y + 3), fill=(28, 30, 34), outline=(190, 190, 175))
-    blend_noise(metal, .08).save(metal_path)
+    for y in range(0, size, 32):
+        md.line((0, y, size, y), fill=_shade(tc, -35), width=3)
+        md.line((0, y + 4, size, y + 4), fill=_shade(tc, 22), width=2)
+    for _ in range(90):
+        x, y = random.randrange(size), random.randrange(size)
+        md.line((x, y, min(size, x + random.randrange(4, 38)), y + random.randint(-2, 2)), fill=_shade(tc, random.choice((-46, -28, 22, 34))), width=1)
+    for x in (18, size - 18):
+        for y in (18, size - 18):
+            md.ellipse((x - 7, y - 7, x + 7, y + 7), fill=(30, 34, 38), outline=_shade(tc, 35), width=3)
+    blend_noise(metal, .065).save(metal_path, optimize=True)
     return wall_path, floor_path, metal_path
 
 
@@ -357,6 +413,11 @@ card_back = Entity(parent=camera.ui, model="quad", scale=(1.25, .50), color=colo
 card_title = Text(parent=camera.ui, text="", origin=(0, 0), position=(0, .11), scale=1.55, color=hx("#e9d6aa"), enabled=False)
 card_body = Text(parent=camera.ui, text="", origin=(0, 0), position=(0, -.015), scale=.85, color=hx("#d2d0c6"), enabled=False)
 card_sub = Text(parent=camera.ui, text="", origin=(0, 0), position=(0, -.16), scale=.66, color=hx("#a7b7a7"), enabled=False)
+puzzle_back = Entity(parent=camera.ui, model="quad", scale=(1.22, .76), color=color.rgba(7, 11, 14, 246), z=-1, enabled=False)
+puzzle_title = Text(parent=camera.ui, text="", origin=(0, 0), position=(0, .27), scale=1.28, color=hx("#e2c88e"), enabled=False)
+puzzle_clue = Text(parent=camera.ui, text="", origin=(0, 0), position=(0, .09), scale=.78, color=hx("#d9ddd2"), enabled=False)
+puzzle_progress = Text(parent=camera.ui, text="", origin=(0, 0), position=(0, -.08), scale=1.12, color=hx("#e5d1a2"), enabled=False)
+puzzle_help = Text(parent=camera.ui, text="1-4 tuslari: giris  |  ENTER: onayla  |  BACKSPACE: geri", origin=(0, 0), position=(0, -.27), scale=.62, color=hx("#a9b4b0"), enabled=False)
 
 # -----------------------------------------------------------------------------
 # Global oyun durumu
@@ -405,6 +466,22 @@ enemy_patrol_room = 1
 caught_lock = False
 show_map = False
 ending = False
+console_pos = (0.0, 0.0)
+exit_pos = (0.0, 0.0)
+extraction_door = None
+puzzle_active = False
+puzzle_solved = False
+puzzle_entry: list[int] = []
+puzzle_attempts = 0
+escape_active = False
+escape_timer = 0.0
+PUZZLES = [
+    {"title": "MALIKANE / ANA SIGORTA DEVRESI", "hint": "Not: Yesil = 2, Sari = 4, Kirmizi = 1, Mavi = 3. Sirayi duvar notundaki renklere gore gir.", "sequence": [2, 4, 1, 3]},
+    {"title": "HASTANE / HASTA ARSIVI TERMINALI", "hint": "Dosya kenarindaki oda kaydi: 3. kat, 1. koridor, 4. oda, 2. yatak. Dizi bu sirada.", "sequence": [3, 1, 4, 2]},
+    {"title": "ORMAN / SINYAL FREKANSI", "hint": "Telsiz gunlugu: Bati, Dogu, Kuzey, Guney. Panelde Bati=4, Dogu=2, Kuzey=1, Guney=3.", "sequence": [4, 2, 1, 3]},
+    {"title": "SIGINAK / BASINC HATTI", "hint": "Basinc notu: once 3 numarali hat, sonra 1, ardindan 4 ve son olarak 2.", "sequence": [3, 1, 4, 2]},
+    {"title": "SAAT KULESI / SON MEKANIZMA", "hint": "Saat ustasinin kaydi: Kisa, Uzun, Kisa, Cift, Uzun. Kadran tus eslemesi 2, 1, 3, 4, 2.", "sequence": [2, 1, 3, 4, 2]},
+]
 startup_assets_ready = threading.Event()
 startup_queued = False
 startup_started = False
@@ -725,75 +802,78 @@ def build_lamps(style: dict):
 
 
 def build_exit_gate(style: dict):
+    """Uzak odada bolum terminali, baslangic odasinda cikis kapisi kur."""
+    global extraction_door
+    # Kontrol terminali haritanin son odasinda.
     cx, cz = room_center(GRID * GRID - 1)
-    # Cikis terminali ve kemerli kapisi.
-    add_box(cx, 1.95, cz - 4.25, 2.85, 3.9, .36, style["trim"], collision=False)
-    add_box(cx, 1.88, cz - 4.00, 2.20, 3.45, .10, hx("#10151a"))
-    for sx in (-1.12, 1.12):
-        add_box(cx + sx, 1.8, cz - 4.20, .12, 3.55, .20, style["glow"])
-    add_box(cx, 3.63, cz - 4.20, 2.35, .14, .20, style["glow"])
-    add_box(cx, .88, cz - 5.15, 1.8, 1.6, .62, hx("#252c32"), collision=True)
-    add_box(cx, 1.75, cz - 5.15, 1.7, .08, .58, style["trim"])
-    for xoff in (-.48, 0, .48):
-        static_entity(parent=room_parent(cx + xoff, cz - 5.18), model="sphere", position=(cx + xoff, 1.85, cz - 5.18), scale=.11, color=palette_color(style["glow"]))
-    return (cx, cz - 4.9)
+    terminal_z = cz - 2.8
+    add_box(cx, 1.35, terminal_z, 2.3, 2.6, .42, hx("#20282d"), collision=False)
+    add_box(cx, 1.52, terminal_z - .24, 1.95, .92, .06, hx("#111b20"))
+    add_box(cx, 2.15, terminal_z - .28, 1.45, .08, .035, style["glow"])
+    for xoff in (-.65, 0, .65):
+        add_box(cx + xoff, .86, terminal_z - .28, .13, .24, .08, style["trim"])
+        add_cylinder(cx + xoff, .70, terminal_z - .34, (.11, .08, .11), style["glow"])
+
+    # Ana cikis oyuncunun basladigi oda tarafinda bulunur. Puzzle sonrasi
+    # tum haritayi geri kosmak zorunda kalir; kovalamaca bu rotayi kullanir.
+    sx, sz = room_center(0)
+    door_z = 1.45
+    for side in (-1, 1):
+        add_box(sx + side * 1.45, 1.92, door_z, .24, 3.84, .34, style["trim"])
+        add_box(sx + side * 1.45, 1.92, door_z - .20, .08, 3.52, .08, style["glow"])
+    add_box(sx, 3.78, door_z, 3.10, .24, .34, style["trim"])
+    extraction_door = add_box(sx, 1.82, door_z + .10, 2.55, 3.42, .12, hx("#101619"))
+    add_box(sx, 1.72, door_z + .02, 2.35, .08, .16, style["glow"])
+    # Door threshold. Keep it non-colliding so the final interaction is reliable.
+    add_box(sx, .08, door_z + 1.25, 2.45, .16, .72, style["trim"])
+    return (cx, terminal_z - .75), (sx, door_z + 1.35)
 
 
 def update_room_streaming(force: bool = False) -> None:
-    """Kameranin onundeki odalari, oyuncu yakinini ve yaratigin bolgesini yukle.
-
-    Oda geometrisi korunur; sadece uzak chunk'lar kapatilir. Boylece geri
-    donuldugunde tekrar model olusturma veya collider kaybi yasanmaz.
-    """
+    """Keep the player's visual neighborhood and the monster's neighborhood alive."""
     global room_stream_last, room_active
     if not room_nodes:
         return
-    if not force and chapter_clock - room_stream_last < 0.18:
+    if not force and chapter_clock - room_stream_last < .15:
         return
     room_stream_last = chapter_clock
 
     px, pz = player.x, player.z
-    player_room = room_at(px, pz)
-    yaw = math.radians(player.rotation_y)
-    forward_x, forward_z = math.sin(yaw), math.cos(yaw)
-    # Oyuncunun hemen cevresindeki 3x3 oda guvenli tampon olarak daima acik.
+    # 3x3 safety bubble around player; the camera cone adds only nearby forward chunks.
     active = set(nearby_room_ids(px, pz, 1))
-    view_range = CELL * 3.15
-    view_range_sq = view_range * view_range
-    # Kamera yonunde biraz daha ileri gorus mesafesi; yan/arka odalar uyur.
+    yaw = math.radians(player.rotation_y)
+    fx, fz = math.sin(yaw), math.cos(yaw)
+    view_range = CELL * 3.25
     for room_id in range(GRID * GRID):
         cx, cz = room_center(room_id)
         dx, dz = cx - px, cz - pz
         dist_sq = dx * dx + dz * dz
-        if dist_sq > view_range_sq or room_id in active:
+        if dist_sq > view_range * view_range or dist_sq < .01:
             continue
-        dist = math.sqrt(dist_sq)
-        if dist > 0.01:
-            dot = (dx * forward_x + dz * forward_z) / dist
-            if dot > 0.28:
-                active.add(room_id)
+        dot = (dx * fx + dz * fz) / math.sqrt(dist_sq)
+        if dot > .12:
+            active.add(room_id)
 
-    # Dusman hareket ettigi yerde de kendi cevresi acik kalir; uzaktaki oyuncu
-    # bolgesiyle cakismasa bile dusman kapali bir odanin icine girmez.
+    # Enemy AI must keep its local navigation area visible even during long chases.
     if enemy is not None and enemy.root.enabled:
         active.update(nearby_room_ids(enemy.root.x, enemy.root.z, 1))
-
-    # Gecislerde titresemeyi onlemek icin eski chunk'lara kucuk bir tampon tanir.
-    for room_id in room_active - active:
-        cx, cz = room_center(room_id)
-        pdx, pdz = cx - px, cz - pz
-        if pdx * pdx + pdz * pdz < (CELL * 1.7) ** 2:
-            active.add(room_id)
+    active.add(room_at(px, pz))
+    if not active:
+        active.add(0)
 
     for room_id, node in enumerate(room_nodes):
         should_enable = room_id in active
-        if node.enabled != should_enable:
-            node.enabled = should_enable
+        if should_enable:
+            node.enabled = True
+            node.show()
+        else:
+            node.enabled = False
+            node.hide()
     room_active = active
 
 
 def build_world():
-    global world_root, wall_colliders, furniture_colliders, room_lights
+    global world_root, wall_colliders, furniture_colliders, room_lights, console_pos, exit_pos
     global room_nodes, room_active, wall_colliders_by_room, furniture_colliders_by_room
     global room_stream_last, selected_lamps, lamp_refresh_timer
     if world_root is not None:
@@ -811,8 +891,10 @@ def build_world():
     floor_tex = load_texture(floor_path)
     metal_tex = load_texture(metal_path)
     make_maze()
+    # Chunk'lar once gorunur kurulur. Ilk stream turu oyuncu konumuna gore
+    # guvenli alanlari acik birakir; kapali parent nedeniyle bos/beyaz sahne olusmaz.
     room_nodes = [
-        static_entity(parent=world_root, name=f"room_chunk_{room}", enabled=False)
+        static_entity(parent=world_root, name=f"room_chunk_{room}", enabled=True)
         for room in range(GRID * GRID)
     ]
     wall_colliders_by_room = [[] for _ in range(GRID * GRID)]
@@ -821,11 +903,11 @@ def build_world():
     # Zemin ve tavan: her oda ayri chunk icinde tutulur.
     for room in range(GRID * GRID):
         cx, cz = room_center(room)
-        static_entity(parent=room_nodes[room], model="plane", position=(cx, .015, cz), scale=(CELL, 1, CELL),
-               texture=floor_tex, texture_scale=(2.5, 2.5), color=color.white)
+        static_entity(parent=room_nodes[room], model="plane", position=(cx, .018, cz), scale=(CELL, 1, CELL),
+               texture=floor_tex, texture_scale=(2.8, 2.8), color=color.white, double_sided=True)
         static_entity(parent=room_nodes[room], model="plane", position=(cx, WALL_H, cz), rotation_x=180,
-               scale=(CELL, 1, CELL), texture=wall_tex, texture_scale=(2.5, 2.5),
-               color=hx("#77716a"), double_sided=True)
+               scale=(CELL, 1, CELL), texture=wall_tex, texture_scale=(2.8, 2.8),
+               color=hx("#b0a99b"), double_sided=True)
         # Tavan kirişi ve koselerde kolonlar.
         for sx in (-5.45, 5.45):
             add_box(cx + sx, WALL_H - .20, cz, .16, .34, CELL, style["trim"], metal_tex)
@@ -864,13 +946,18 @@ def build_world():
                 for dx in (-DOOR_W / 2, DOOR_W / 2):
                     add_box(gap + dx, WALL_H / 2, fixed, .52, WALL_H, .48, style["trim"], metal_tex)
                 add_box(gap, WALL_H - .16, fixed, DOOR_W, .32, .52, style["trim"], metal_tex)
+            elif gz == 0 and rx == 0:
+                # Baslangic odasindaki cikis kapisi icin dis duvarda aciklik.
+                gap = CELL / 2
+                make_wall_segment("x", fixed, start, gap - DOOR_W / 2, wall_tex, style["trim"], metal_tex)
+                make_wall_segment("x", fixed, gap + DOOR_W / 2, end, wall_tex, style["trim"], metal_tex)
             else:
                 make_wall_segment("x", fixed, start, end, wall_tex, style["trim"], metal_tex)
 
     decorate_rooms(style, wall_tex, metal_tex)
     build_lamps(style)
-    gate_pos = build_exit_gate(style)
-    return gate_pos
+    console_pos, exit_pos = build_exit_gate(style)
+    return console_pos
 
 # -----------------------------------------------------------------------------
 # Koleksiyon nesneleri
@@ -1047,15 +1134,23 @@ def objective_text() -> str:
 def update_hud():
     style = CHAPTERS[chapter_index]
     hud_chapter.text = f"{style['subtitle']}  -  {style['name']}"
-    hud_objective.text = objective_text()
-    hud_hint.text = "WASD hareket  |  SHIFT kos  |  C egil  |  E etkilesim  |  F fener  |  R telsiz  |  TAB harita"
+    if escape_active:
+        hud_objective.text = f"KAC! BASLANGIC CIKISINA DON  |  {max(0, int(escape_timer))} sn"
+    elif puzzle_solved:
+        hud_objective.text = "Terminal aktif: baslangic cikisina geri don."
+    else:
+        hud_objective.text = objective_text()
+    hud_hint.text = "WASD hareket  |  SHIFT kos  |  C egil  |  E etkilesim  |  F fener  |  R telsiz  |  TAB durum"
     hud_battery.text = f"FENER {int(battery_charge):02d}%"
     hud_battery.color = hx("#dfc98d") if battery_charge > 25 else hx("#dd7868")
     hud_progress.text = f"BOLUM {chapter_index + 1}/5"
     stamina_bar.scale_x = .27 * max(0, stamina / 100)
     stamina_bar.x = -.135 + .135 * max(0, stamina / 100)
     stamina_bar.color = hx("#b94c43") if exhausted else hx("#c6a35d")
-    hud_status.text = "EGILMIS DURUM" if crouching else ("YAKINDA BIR SEY VAR" if enemy and enemy.root.enabled and distance_to_enemy() < 15 else "")
+    if escape_active:
+        hud_status.text = "KOVALAMACA! CIKISA ULAS"
+    else:
+        hud_status.text = "EGILMIS DURUM" if crouching else ("YAKINDA BIR SEY VAR" if enemy and enemy.root.enabled and distance_to_enemy() < 15 else "")
     hud_status.color = hx("#dc8274") if hud_status.text else hx("#e1b47c")
 
 
@@ -1110,11 +1205,80 @@ def collect_pickup(item: dict):
         show_toast("Hedef tamamlandi. Cikis terminalini bul.", 4.0)
 
 
+def start_chapter_puzzle():
+    global puzzle_active, puzzle_entry, puzzle_attempts
+    if puzzle_solved or puzzle_active:
+        return
+    puzzle_active = True
+    puzzle_entry = []
+    puzzle_attempts = 0
+    info = PUZZLES[chapter_index]
+    puzzle_title.text = info["title"]
+    puzzle_clue.text = info["hint"] + "\n\nTerminalde 1, 2, 3 ve 4 tuslarini kullan."
+    puzzle_progress.text = "GIRIS: _ _ _ _ _"
+    puzzle_help.text = "1-4: tus gir  |  BACKSPACE: sil  |  ENTER: onayla  |  ESC: kapat"
+    for ui in (puzzle_back, puzzle_title, puzzle_clue, puzzle_progress, puzzle_help):
+        ui.enabled = True
+    set_frozen(True)
+    show_toast("Terminal bulmacasi basladi. Cevreni dinle.", 2.5)
+
+
+def update_puzzle_display():
+    expected = len(PUZZLES[chapter_index]["sequence"])
+    dots = [str(n) for n in puzzle_entry] + ["_"] * max(0, expected - len(puzzle_entry))
+    puzzle_progress.text = "GIRIS: " + "  ".join(dots[:expected])
+
+
+def submit_chapter_puzzle():
+    global puzzle_active, puzzle_solved, escape_active, escape_timer, enemy_state
+    target = PUZZLES[chapter_index]["sequence"]
+    if puzzle_entry == target:
+        puzzle_active = False
+        puzzle_solved = True
+        for ui in (puzzle_back, puzzle_title, puzzle_clue, puzzle_progress, puzzle_help):
+            ui.enabled = False
+        set_frozen(False)
+        escape_active = True
+        escape_timer = max(58.0, 112.0 - chapter_index * 10.0)
+        if extraction_door is not None:
+            extraction_door.animate_rotation_y(86, duration=1.4)
+        show_toast("DEVRE AKTIF! Yaratik uyandi. BASLANGIC CIKISINA KOS!", 5.0)
+        if enemy is not None:
+            if not enemy.root.enabled:
+                spawn_enemy()
+            enemy.state = "chase"
+            enemy.last_seen = (player.x, player.z)
+            enemy.lost = 0.0
+            enemy.timer = escape_timer + 15.0
+            enemy.speed = CHAPTERS[chapter_index]["speed"] * 1.10
+            enemy_state = "chase"
+    else:
+        puzzle_entry.clear()
+        update_puzzle_display()
+        show_toast("SIFRE HATALI! Notu tekrar incele.", 2.2)
+        if enemy is not None:
+            enemy.spawn_countdown = max(0.0, enemy.spawn_countdown - 8.0)
+
+
+def cancel_chapter_puzzle():
+    global puzzle_active
+    puzzle_active = False
+    for ui in (puzzle_back, puzzle_title, puzzle_clue, puzzle_progress, puzzle_help):
+        ui.enabled = False
+    set_frozen(False)
+    show_toast("Terminal beklemede. Hazir olunca tekrar dene.", 2.2)
+
+
 def complete_chapter():
-    global chapter_index, ending, chapter_intro
+    global chapter_index, ending, chapter_intro, escape_active, escape_timer
     if chapter_items_collected < CHAPTERS[chapter_index]["required"]:
         show_toast(CHAPTERS[chapter_index]["gate_text"], 3.4)
         return
+    if not puzzle_solved:
+        show_toast("Once uzak terminaldeki bolum bulmacasini coz.", 3.2)
+        return
+    escape_active = False
+    escape_timer = 0.0
     set_frozen(True)
     if chapter_index == len(CHAPTERS) - 1:
         ending = True
@@ -1141,6 +1305,7 @@ def next_chapter():
 def start_chapter():
     global chapter_items_collected, battery_charge, flashlight_on, crouching, stamina
     global exhausted, chapter_clock, spawn_clock, enemy, enemy_state, caught_lock, chapter_intro, camera_pitch, show_map
+    global puzzle_active, puzzle_solved, puzzle_entry, escape_active, escape_timer
     chapter_items_collected = 0
     battery_charge = 100.0 if chapter_index == 0 else min(100.0, battery_charge + 15)
     flashlight_on = False
@@ -1150,6 +1315,13 @@ def start_chapter():
     chapter_clock = 0.0
     spawn_clock = 0.0
     caught_lock = False
+    puzzle_active = False
+    puzzle_solved = False
+    puzzle_entry = []
+    escape_active = False
+    escape_timer = 0.0
+    for ui in (puzzle_back, puzzle_title, puzzle_clue, puzzle_progress, puzzle_help):
+        ui.enabled = False
     show_map = False
     map_back.enabled = False
     map_text.enabled = False
@@ -1167,14 +1339,15 @@ def start_chapter():
     scene.setFog(fog)
     fog.setColor(*(c / 255 for c in style["fog"]), 1.0)
     fog.setExpDensity(.020 + chapter_index * .0025)
-    ambient.setColor(style["ambient"])
+    amb = style["ambient"]
+    ambient.setColor((min(1.0, amb[0] * 1.55 + .07), min(1.0, amb[1] * 1.55 + .07), min(1.0, amb[2] * 1.55 + .07), 1.0))
     spot.setColor((0, 0, 0, 1))
     update_hud()
     card_title.text = style["name"]
     card_body.text = style["story"]
     card_sub.text = f"{style['subtitle']}  |  Yakalanirsan bolum ilerlemen korunur."
     card_back.enabled = card_title.enabled = card_body.enabled = card_sub.enabled = True
-    set_frozen(True)
+    set_frozen(False)
     invoke(hide_chapter_card, delay=4.2)
     if ambience_audio:
         ambience_audio.volume = .18 + chapter_index * .015
@@ -1189,10 +1362,12 @@ def hide_chapter_card():
 
 
 def caught_by_enemy():
-    global caught_lock, battery_charge, stamina, exhausted, flashlight_on
+    global caught_lock, battery_charge, stamina, exhausted, flashlight_on, escape_active, escape_timer
     if caught_lock or frozen:
         return
     caught_lock = True
+    escape_active = False
+    escape_timer = 0.0
     set_frozen(True)
     flashlight_on = False
     battery_charge = max(8, battery_charge - 18)
@@ -1353,6 +1528,8 @@ def update_interactions():
     hud_prompt.text = ""
     best = 2.0
     for item in pickups:
+        if item.get("room") not in room_active:
+            continue
         dx, dz = item["x"] - player.x, item["z"] - player.z
         dist = math.hypot(dx, dz)
         if dist < best:
@@ -1364,19 +1541,52 @@ def update_interactions():
             near_action = lambda item=item: collect_pickup(item)
 
     style = CHAPTERS[chapter_index]
-    gate_x, gate_z = (GRID - .5) * CELL, (GRID - .5) * CELL - 4.9
-    dist_gate = math.hypot(gate_x - player.x, gate_z - player.z)
-    if dist_gate < 3.2 and dist_gate < best + .5:
-        if chapter_items_collected >= style["required"]:
-            hud_prompt.text = "[E] Cikis terminalini etkinlestir"
+    # Uzak odadaki terminal: once hedefleri tamamla, ardindan o bolumun bulmacasini coz.
+    cx, cz = console_pos
+    dist_console = math.hypot(cx - player.x, cz - player.z)
+    if dist_console < 3.0 and dist_console < best + .6:
+        if chapter_items_collected < style["required"]:
+            hud_prompt.text = f"Terminal kilitli: {chapter_items_collected}/{style['required']} {style['item_name']}"
+            near_action = None
+        elif not puzzle_solved:
+            hud_prompt.text = "[E] Bolum terminalini incele / bulmaca"
+            near_action = start_chapter_puzzle
+        else:
+            hud_prompt.text = "Devre aktif. Baslangic cikisina don!"
+            near_action = None
+
+    # Baslangic odasindaki dis kapi: bulmaca cozuldukten ve kovalamacadan sonra cikis.
+    ex, ez = exit_pos
+    dist_exit = math.hypot(ex - player.x, ez - player.z)
+    if dist_exit < 2.7:
+        if puzzle_solved:
+            hud_prompt.text = "[E] Acik cikistan kac"
             near_action = complete_chapter
         else:
-            hud_prompt.text = f"Cikis kilitli: {chapter_items_collected}/{style['required']} {style['item_name']}"
+            hud_prompt.text = "Cikis kilitli: terminal bulmacasi gerekli"
             near_action = None
 
 
 def input(key):
     global flashlight_on, crouching, show_map, camera_pitch
+    if puzzle_active:
+        if key == "escape":
+            cancel_chapter_puzzle()
+        elif key in ("1", "2", "3", "4"):
+            if len(puzzle_entry) < len(PUZZLES[chapter_index]["sequence"]):
+                puzzle_entry.append(int(key))
+                update_puzzle_display()
+        elif key == "backspace":
+            if puzzle_entry:
+                puzzle_entry.pop()
+                update_puzzle_display()
+        elif key == "enter":
+            submit_chapter_puzzle()
+        return
+
+    if key == "left mouse down" and not frozen:
+        mouse.locked = True
+        return
     if key == "escape":
         if ending:
             application.quit()
@@ -1406,8 +1616,9 @@ def input(key):
                 "HARITA / DURUM\n\n"
                 f"Bolum: {chapter_index + 1}/5\n"
                 f"Hedef: {chapter_items_collected}/{CHAPTERS[chapter_index]['required']}\n"
+                f"Bulmaca: {'Tamam' if puzzle_solved else 'Bekliyor'}\n"
                 f"Pil: {int(battery_charge)}%\n\n"
-                "Harita prosedurel.\nR: telsizden hedef yonu."
+                "R: telsizden hedef yonu."
             )
     elif key == "f11":
         window.fullscreen = not window.fullscreen
@@ -1447,6 +1658,7 @@ def begin_startup() -> None:
         print("[ECHO] Malikane haritasi ve modeller olusturuluyor...", flush=True)
         start_chapter()
         print("[ECHO] Ilk bolum hazir.", flush=True)
+        application.base.setBackgroundColor(0.012, 0.018, 0.026, 1.0)
         startup_panel.enabled = False
         startup_title.enabled = False
         startup_message.enabled = False
@@ -1465,7 +1677,7 @@ def begin_startup() -> None:
 def update():
     global camera_pitch, battery_charge, flashlight_on, stamina, exhausted
     global chapter_clock, toast_timer, walk_phase, step_counter, noise_level
-    global startup_queued, lamp_refresh_timer, selected_lamps
+    global startup_queued, lamp_refresh_timer, selected_lamps, escape_timer
 
     # App penceresi acilip ilk kare cizildikten sonra yuklemeyi baslat.
     if startup_assets_ready.is_set() and not startup_queued:
@@ -1478,6 +1690,10 @@ def update():
             fade.alpha = max(0, fade.alpha - dt * .9)
         return
     chapter_clock += dt
+    if escape_active:
+        escape_timer = max(0.0, escape_timer - dt)
+        if escape_timer <= 0 and not caught_lock:
+            caught_by_enemy()
 
     # Fare/kamera.
     mx, my = mouse.velocity
