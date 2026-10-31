@@ -12,6 +12,7 @@ import random
 import wave
 import struct
 import traceback
+import threading
 from collections import deque
 
 try:
@@ -237,15 +238,26 @@ def build_audio_files() -> None:
     make("pickup", .18, lambda t, d: math.sin(t * 2 * math.pi * (720 - 400 * t / d)) * (1 - t / d))
 
 
-build_audio_files()
-try:
-    ambience_audio = Audio(os.path.join(SFX_DIR, "ambience.wav"), autoplay=True, loop=True, volume=.22)
-    step_audio = Audio(os.path.join(SFX_DIR, "step.wav"), autoplay=False, volume=.35)
-    pulse_audio = Audio(os.path.join(SFX_DIR, "pulse.wav"), autoplay=False, volume=.6)
-    sting_audio = Audio(os.path.join(SFX_DIR, "sting.wav"), autoplay=False, volume=.8)
-    pickup_audio = Audio(os.path.join(SFX_DIR, "pickup.wav"), autoplay=False, volume=.6)
-except Exception:
-    ambience_audio = step_audio = pulse_audio = sting_audio = pickup_audio = None
+# Ses dosyalari ve dokular arka planda hazirlanir. Boylece pencere acilmadan
+# once uzun dosya/texture uretimi yapilip kullaniciya siyah ekran gosterilmez.
+ambience_audio = step_audio = pulse_audio = sting_audio = pickup_audio = None
+audio_initialized = False
+
+
+def initialize_audio() -> None:
+    """Audio nesnelerini Ursina ana thread'inde guvenli sekilde yukle."""
+    global ambience_audio, step_audio, pulse_audio, sting_audio, pickup_audio, audio_initialized
+    if audio_initialized:
+        return
+    audio_initialized = True
+    try:
+        ambience_audio = Audio(os.path.join(SFX_DIR, "ambience.wav"), autoplay=True, loop=True, volume=.22)
+        step_audio = Audio(os.path.join(SFX_DIR, "step.wav"), autoplay=False, volume=.35)
+        pulse_audio = Audio(os.path.join(SFX_DIR, "pulse.wav"), autoplay=False, volume=.6)
+        sting_audio = Audio(os.path.join(SFX_DIR, "sting.wav"), autoplay=False, volume=.8)
+        pickup_audio = Audio(os.path.join(SFX_DIR, "pickup.wav"), autoplay=False, volume=.6)
+    except Exception:
+        ambience_audio = step_audio = pulse_audio = sting_audio = pickup_audio = None
 
 # -----------------------------------------------------------------------------
 # Aydinlatma ve kamera
@@ -304,6 +316,15 @@ hud_prompt = Text(parent=camera.ui, text="", origin=(0, 0), position=(0, -.105),
 hud_toast = Text(parent=camera.ui, text="", origin=(0, 0), position=(0, .30), scale=.95, color=hx("#f5dba7"))
 hud_progress = Text(parent=camera.ui, text="", position=(.60, .465), scale=.74, color=hx("#d5c49e"))
 
+# Ilk pencere gorunur gorunmez kullaniciya yukleme ekrani goster.
+startup_panel = Entity(parent=camera.ui, model="quad", scale=(1.65, .52),
+                        color=color.rgba(5, 8, 10, 238), z=-1)
+startup_title = Text(parent=camera.ui, text=APP_NAME, origin=(0, 0),
+                     position=(0, .075), scale=1.45, color=hx("#e5d1a2"))
+startup_message = Text(parent=camera.ui, text="Dokular ve sesler hazirlaniyor...",
+                       origin=(0, 0), position=(0, -.075), scale=.82,
+                       color=hx("#bdc4b5"))
+
 stamina_back = Entity(parent=camera.ui, model="quad", position=(0, -.405), scale=(.27, .009), color=hx("#2a2927"))
 stamina_bar = Entity(parent=camera.ui, model="quad", position=(0, -.405), scale=(.27, .006), color=hx("#c6a35d"))
 map_back = Entity(parent=camera.ui, model="quad", position=(.67, .17), scale=(.34, .32), color=color.rgba(8, 12, 13, 220), enabled=False)
@@ -354,6 +375,9 @@ enemy_patrol_room = 1
 caught_lock = False
 show_map = False
 ending = False
+startup_assets_ready = threading.Event()
+startup_queued = False
+startup_started = False
 
 def show_toast(message: str, duration: float = 2.8) -> None:
     global toast_timer
@@ -382,8 +406,8 @@ def palette_color(value):
 def make_ring(x: float, y: float, z: float, radius: float, tint, parent=None, rotation=(0, 0, 0), thickness=.075):
     """Create a ring from small spheres so no external torus model is required."""
     group = Entity(parent=parent if parent is not None else world_root, position=(x, y, z), rotation=rotation)
-    for index in range(16):
-        angle = math.tau * index / 16
+    for index in range(12):
+        angle = math.tau * index / 12
         Entity(parent=group, model="sphere",
                position=(math.cos(angle) * radius, 0, math.sin(angle) * radius),
                scale=(thickness, thickness, thickness), color=palette_color(tint))
@@ -598,7 +622,7 @@ def build_clockwork(cx: float, cz: float, trim, glow):
 def decorate_rooms(style: dict, wall_tex, metal_tex):
     rng = random.Random(7000 + chapter_index)
     for room in range(1, GRID * GRID - 1):
-        if rng.random() > .31:
+        if rng.random() > .24:
             continue
         cx, cz = room_center(room)
         side = rng.choice((0, 1, 2, 3))
@@ -629,7 +653,7 @@ def build_lamps(style: dict):
     room_lights = []
     rng = random.Random(3210 + chapter_index)
     for room in range(GRID * GRID):
-        if rng.random() < .58:
+        if rng.random() < .42:
             cx, cz = room_center(room)
             room_lights.append((cx, cz, rng.random() * 10))
             Entity(parent=world_root, model="cylinder", position=(cx, WALL_H - .15, cz),
@@ -1256,9 +1280,54 @@ def input(key):
         window.fullscreen = not window.fullscreen
 
 
+def prepare_startup_assets() -> None:
+    """Tum bolum dokularini ve sesleri pencere acikken arka planda hazirla."""
+    try:
+        for index, style in enumerate(CHAPTERS, start=1):
+            build_chapter_textures(index, style)
+        build_audio_files()
+    except Exception:
+        # Yukleme hatasi oyunu sessizce kilitlemesin; ana thread hata kaydini
+        # olustururken yine de baslatmayi deneyecek.
+        traceback.print_exc()
+    finally:
+        startup_assets_ready.set()
+
+
+def begin_startup() -> None:
+    """Ilk kare gosterildikten sonra seviyeyi ana Ursina thread'inde kur."""
+    global startup_started
+    if startup_started:
+        return
+    startup_started = True
+    startup_message.text = "Ilk bolum olusturuluyor..."
+    try:
+        initialize_audio()
+        start_chapter()
+        startup_panel.enabled = False
+        startup_title.enabled = False
+        startup_message.enabled = False
+    except Exception as exc:
+        print("\nOYUN BASLATILAMADI:\n")
+        traceback.print_exc()
+        try:
+            with open("echo_hata.txt", "w", encoding="utf-8") as error_file:
+                traceback.print_exc(file=error_file)
+        except Exception:
+            pass
+        startup_title.text = "OYUN BASLATILAMADI"
+        startup_message.text = f"{type(exc).__name__}: {exc}  |  echo_hata.txt dosyasina bak."
+
+
 def update():
     global camera_pitch, battery_charge, flashlight_on, stamina, exhausted
     global chapter_clock, toast_timer, walk_phase, step_counter, noise_level
+    global startup_queued
+
+    # App penceresi acilip ilk kare cizildikten sonra yuklemeyi baslat.
+    if startup_assets_ready.is_set() and not startup_queued:
+        startup_queued = True
+        invoke(begin_startup, delay=.25)
 
     dt = min(time.dt, .04)
     if frozen:
@@ -1378,11 +1447,24 @@ def update():
 # Baslat
 # -----------------------------------------------------------------------------
 try:
-    start_chapter()
+    # Agir doku/ses uretimini arka plana al. start_chapter artik app.run'dan
+    # once cagrilmaz; pencere ve yukleme ekrani hemen gorunur.
+    asset_thread = threading.Thread(
+        target=prepare_startup_assets,
+        name="EchoAssetPreloader",
+        daemon=True,
+    )
+    asset_thread.start()
     app.run()
 except Exception:
     print("\nOYUNDA BIR HATA OLUSTU:\n")
     traceback.print_exc()
-    with open("echo_hata.txt", "w", encoding="utf-8") as error_file:
-        traceback.print_exc(file=error_file)
-    sys.stdin.readline()
+    try:
+        with open("echo_hata.txt", "w", encoding="utf-8") as error_file:
+            traceback.print_exc(file=error_file)
+    except Exception:
+        pass
+    try:
+        sys.stdin.readline()
+    except Exception:
+        pass
