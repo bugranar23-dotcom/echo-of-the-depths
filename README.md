@@ -7,6 +7,9 @@ Windows'ta `RUN_GAME.bat` dosyasina cift tikla. Baslatici Python 3.12+ surumleri
 
 Elle kurulum: `py -3.12 -m pip install -r requirements.txt` ve `py -3.12 Echo_of_the_Depths.py`.
 
+## Model duzeltmesi
+Ursina'da `model="cylinder"` adinda yerlesik model bulunmadigindan tum silindir bicimli nesneler resmi prosedurel `Cylinder` mesh'i ile degistirildi. Bu, `warning: missing model: 'cylinder'` uyarilarini giderir.
+
 ## Acilis duzeltmeleri
 - Ilk acilista yalnizca 1. bolumun dokulari ve sesleri hazirlanir.
 - Sonraki bolumlerin dokulari o bolume gecildiginde olusturulur.
