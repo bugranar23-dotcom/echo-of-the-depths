@@ -1395,7 +1395,9 @@ class Stalker:
         self.lost = 0.0
         self.last_seen = (CELL / 2, CELL / 2)
         self.patrol_room = GRID * 2 + 2
-        self.spawn_countdown = style["spawn"]
+        self.spawn_countdown = random.uniform(max(16, style["spawn"] * .38), max(24, style["spawn"] * .58))
+        self.presence_timer = 0.0
+        self.scared_this_visit = False
         self.speed = style["speed"]
         self.sight = style["sight"]
         self.hearing = style["hearing"]
@@ -1418,13 +1420,28 @@ def make_enemy(style: dict):
     enemy = Stalker(world_root, style)
 
 
+def dismiss_enemy(show_hint: bool = False):
+    """End a sighting cleanly; the creature returns after a quiet interval."""
+    global enemy_state
+    if enemy is None:
+        return
+    enemy.root.enabled = False
+    enemy.state = "dormant"
+    enemy.presence_timer = 0.0
+    enemy.scared_this_visit = False
+    enemy.spawn_countdown = random.uniform(20.0, 32.0) + chapter_index * 1.5
+    enemy_state = "dormant"
+    if show_hint and random.random() < .45:
+        show_toast("Ses uzaklasti. Simdilik yalnizsin.", 2.1)
+
+
 def spawn_enemy():
     global enemy_state
     if enemy is None or enemy.root.enabled:
         return
     player_room = room_at(player.x, player.z)
     dist = graph_distances(player_room)
-    far_rooms = [r for r in range(GRID * GRID) if dist[r] >= 3]
+    far_rooms = [r for r in range(GRID * GRID) if dist[r] >= 2]
     room = random.choice(far_rooms or list(range(1, GRID * GRID)))
     x, z = room_center(room)
     enemy.root.position = (x, 0, z)
@@ -1432,10 +1449,15 @@ def spawn_enemy():
     enemy.state = "roam"
     enemy.patrol_room = random.randrange(GRID * GRID)
     enemy.timer = random.uniform(4.5, 7.5)
+    enemy.presence_timer = random.uniform(17.0, 29.0) + chapter_index * 1.2
+    enemy.scared_this_visit = False
+    enemy.lost = 0.0
     enemy_state = "roam"
-    show_toast("Uzakta bir hareket var. Sesini dusur.", 3.0)
-    if sting_audio:
-        sting_audio.play()
+    if whisper_audio:
+        whisper_audio.volume = random.uniform(.12, .19)
+        whisper_audio.play()
+    if random.random() < .58:
+        show_toast("Koridorun ucunda bir hareket gordun.", 2.6)
 
 # -----------------------------------------------------------------------------
 # Oyun akisi ve bolum hedefleri
@@ -1775,34 +1797,51 @@ def update_enemy(dt: float, moving_fast: bool):
         return
 
     distance = distance_to_enemy()
-    same_floor = True
-    visible = distance < enemy.sight * (0.55 if crouching else 1.0) and line_of_sight(enemy.root.x, enemy.root.z, player.x, player.z)
+    visible = (distance < enemy.sight * (0.55 if crouching else 1.0)
+               and line_of_sight(enemy.root.x, enemy.root.z, player.x, player.z))
     hearing_radius = enemy.hearing * (0.22 if crouching else (1.35 if moving_fast else .55))
     heard = distance < hearing_radius and not crouching
     lit = flashlight_hits_enemy()
 
+    # The first close sighting may trigger one short scare flash per appearance.
+    if visible and 2.8 < distance < 8.5 and not enemy.scared_this_visit:
+        facing = math.radians(player.rotation_y)
+        dx, dz = enemy.root.x - player.x, enemy.root.z - player.z
+        dot = (dx * math.sin(facing) + dz * math.cos(facing)) / max(.1, distance)
+        if dot > .38 and random.random() < .62:
+            trigger_jumpscare()
+        enemy.scared_this_visit = True
+
     if enemy.state == "roam":
+        enemy.presence_timer -= dt
         enemy.timer -= dt
         if visible or heard:
             enemy.state = "chase"
-            enemy.timer = 24 + chapter_index * 4
+            enemy.timer = 18 + chapter_index * 3.5
             enemy.last_seen = (player.x, player.z)
-            enemy.lost = 0
+            enemy.lost = 0.0
             if sting_audio:
+                sting_audio.volume = .42
                 sting_audio.play()
-            show_toast("Seni fark etti! Kose don, gorusunu kes.", 2.4)
+            show_toast("Bir sey seni fark etti. Gorusu kes ve sessizles.", 2.6)
+        elif enemy.presence_timer <= 0 and not escape_active:
+            dismiss_enemy(show_hint=True)
+            return
         else:
-            if enemy.timer <= 0 or math.hypot(enemy.root.x - room_center(enemy.patrol_room)[0], enemy.root.z - room_center(enemy.patrol_room)[1]) < 1.2:
+            if enemy.timer <= 0 or math.hypot(
+                enemy.root.x - room_center(enemy.patrol_room)[0],
+                enemy.root.z - room_center(enemy.patrol_room)[1]
+            ) < 1.2:
                 options = [r for r in range(GRID * GRID) if r != room_at(enemy.root.x, enemy.root.z)]
                 enemy.patrol_room = random.choice(options)
-                enemy.timer = random.uniform(5, 8)
+                enemy.timer = random.uniform(4.0, 7.0)
             tx, tz = path_waypoint(enemy.root.x, enemy.root.z, *room_center(enemy.patrol_room))
-            move_enemy_toward(tx, tz, enemy.speed * .62, dt)
+            move_enemy_toward(tx, tz, enemy.speed * .56, dt)
 
     elif enemy.state == "chase":
         if visible or heard:
             enemy.last_seen = (player.x, player.z)
-            enemy.lost = 0
+            enemy.lost = 0.0
         else:
             enemy.lost += dt
         tx, tz = enemy.last_seen
@@ -1810,28 +1849,42 @@ def update_enemy(dt: float, moving_fast: bool):
         speed = enemy.speed
         if lit:
             speed *= enemy.light_slow
+            if not escape_active:
+                enemy.presence_timer -= dt * .55
         if crouching and not visible:
             speed *= .78
         move_enemy_toward(wx, wz, speed, dt)
         enemy.timer -= dt
-        if distance < 1.2 and (visible or enemy.lost < 1.5):
+        if distance < 1.15 and (visible or enemy.lost < 1.4):
             caught_by_enemy()
             return
-        if enemy.timer <= 0 or enemy.lost > 8 or distance > 37:
+        if enemy.timer <= 0 or enemy.lost > 5.8 or distance > 36:
             enemy.state = "search"
-            enemy.timer = 5.5
+            enemy.timer = random.uniform(3.0, 4.7)
 
     elif enemy.state == "search":
         enemy.timer -= dt
         tx, tz = path_waypoint(enemy.root.x, enemy.root.z, *enemy.last_seen)
-        move_enemy_toward(tx, tz, enemy.speed * .72, dt)
+        move_enemy_toward(tx, tz, enemy.speed * .62, dt)
         if visible or heard:
             enemy.state = "chase"
-            enemy.timer = 22 + chapter_index * 4
+            enemy.timer = 16 + chapter_index * 3
             enemy.last_seen = (player.x, player.z)
+            enemy.lost = 0.0
         elif enemy.timer <= 0:
-            enemy.state = "roam"
-            enemy.timer = 4
+            if escape_active:
+                # During the final escape it reappears deeper in the route instead of ending the chase.
+                enemy.state = "chase"
+                enemy.timer = escape_timer + 8.0
+                enemy.last_seen = (player.x, player.z)
+                enemy.lost = 0.0
+            else:
+                dismiss_enemy(show_hint=True)
+                return
+
+    # A strong light can make it retreat after an encounter, but never during the final chase.
+    if lit and distance < 15 and random.random() < dt * .22 and not escape_active:
+        enemy.presence_timer -= dt * 2.0
     enemy.animate(dt, enemy.state == "chase")
     enemy_state = enemy.state
 
