@@ -535,6 +535,10 @@ scare_overlay = None
 jumpscare_timer = 0.0
 jumpscare_cooldown = 0.0
 ambient_event_timer = 18.0
+scare_overlay = None
+jumpscare_timer = 0.0
+jumpscare_cooldown = 0.0
+ambient_event_timer = 18.0
 
 
 def initialize_audio() -> None:
@@ -711,6 +715,22 @@ def show_toast(message: str, duration: float = 2.8) -> None:
     global toast_timer
     hud_toast.text = message
     toast_timer = duration
+
+
+def trigger_jumpscare():
+    """A brief, non-graphic face flash; it does not lock controls or cause damage."""
+    global jumpscare_timer, jumpscare_cooldown
+    if scare_overlay is None or jumpscare_cooldown > 0:
+        return
+    jumpscare_timer = .42
+    jumpscare_cooldown = 38.0 + chapter_index * 5.0
+    scare_overlay.enabled = True
+    scare_overlay.scale = (1.95, 1.95)
+    scare_overlay.rotation_z = random.uniform(-2.5, 2.5)
+    scare_overlay.color = color.rgba32(255, 255, 255, 245)
+    if jumpscare_audio:
+        jumpscare_audio.volume = .58
+        jumpscare_audio.play()
 
 
 def set_frozen(value: bool) -> None:
@@ -1650,6 +1670,7 @@ def start_chapter():
     stamina = 100.0
     exhausted = False
     chapter_clock = 0.0
+    ambient_event_timer = random.uniform(14.0, 24.0)
     spawn_clock = 0.0
     caught_lock = False
     puzzle_active = False
@@ -1675,7 +1696,7 @@ def start_chapter():
     camera_pitch = 0
     scene.setFog(fog)
     fog.setColor(*(c / 255 for c in style["fog"]))
-    fog.setExpDensity(.020 + chapter_index * .0025)
+    fog.setExpDensity(.024 + chapter_index * .0028)
     amb = style["ambient"]
     ambient.setColor((min(.16, amb[0] * .48 + .025), min(.16, amb[1] * .48 + .025),
                       min(.16, amb[2] * .48 + .025), 1.0))
@@ -2001,7 +2022,9 @@ def prepare_startup_assets() -> None:
     """
     try:
         build_chapter_textures(1, CHAPTERS[0])
+        build_chapter_detail_textures(1, CHAPTERS[0])
         build_audio_files()
+        build_jumpscare_texture()
     except Exception:
         traceback.print_exc()
         try:
@@ -2016,7 +2039,7 @@ def prepare_startup_assets() -> None:
 
 def begin_startup() -> None:
     """Ilk kare gosterildikten sonra seviyeyi ana Ursina thread'inde kur."""
-    global startup_started
+    global startup_started, scare_overlay
     if startup_started:
         return
     startup_started = True
@@ -2024,6 +2047,11 @@ def begin_startup() -> None:
     print("[ECHO] Ses sistemi hazirlaniyor...", flush=True)
     try:
         initialize_audio()
+        scare_path = build_jumpscare_texture()
+        scare_tex = load_texture(os.path.basename(scare_path), folder=Path(TEX_DIR))
+        scare_overlay = Entity(parent=camera.ui, model="quad", scale=(1.95, 1.95),
+                               texture=scare_tex, color=color.rgba32(255, 255, 255, 0),
+                               z=-1.85, enabled=False)
         print("[ECHO] Malikane haritasi ve modeller olusturuluyor...", flush=True)
         start_chapter()
         print("[ECHO] Ilk bolum hazir.", flush=True)
@@ -2047,6 +2075,7 @@ def update():
     global camera_pitch, battery_charge, flashlight_on, stamina, exhausted
     global chapter_clock, toast_timer, walk_phase, step_counter, noise_level
     global startup_queued, lamp_refresh_timer, selected_lamps, escape_timer
+    global jumpscare_timer, jumpscare_cooldown, ambient_event_timer
 
     # App penceresi acilip ilk kare cizildikten sonra yuklemeyi baslat.
     if startup_assets_ready.is_set() and not startup_queued:
@@ -2054,11 +2083,32 @@ def update():
         invoke(begin_startup, delay=.25)
 
     dt = min(time.dt, .04)
+
+    if jumpscare_cooldown > 0:
+        jumpscare_cooldown = max(0.0, jumpscare_cooldown - dt)
+    if jumpscare_timer > 0 and scare_overlay is not None:
+        jumpscare_timer = max(0.0, jumpscare_timer - dt)
+        scale = 1.55 + (jumpscare_timer / .42) * .48
+        scare_overlay.scale = (scale, scale)
+        scare_overlay.color = color.rgba32(255, 255, 255, int(245 * jumpscare_timer / .42))
+        if jumpscare_timer <= 0:
+            scare_overlay.enabled = False
+
     if frozen:
         if fade.alpha > 0 and not caught_lock and not ending:
             fade.alpha = max(0, fade.alpha - dt * .9)
         return
     chapter_clock += dt
+    ambient_event_timer -= dt
+    if ambient_event_timer <= 0 and not escape_active:
+        if random.random() < .56 and knock_audio:
+            knock_audio.volume = random.uniform(.12, .20)
+            knock_audio.play()
+        elif whisper_audio:
+            whisper_audio.volume = random.uniform(.10, .17)
+            whisper_audio.play()
+        ambient_event_timer = random.uniform(19.0, 34.0)
+
     if escape_active:
         escape_timer = max(0.0, escape_timer - dt)
         if escape_timer <= 0 and not caught_lock:
