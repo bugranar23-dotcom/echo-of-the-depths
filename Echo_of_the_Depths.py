@@ -190,9 +190,9 @@ def _shade(rgb, delta):
 
 def build_chapter_textures(chapter_index: int, style: dict) -> tuple[str, str, str]:
     """Bolume gore 512px, katmanli ve tekrar edilebilir duvar/zemin/metal dokulari."""
-    wall_path = os.path.join(TEX_DIR, f"wall_{chapter_index}_v5.png")
-    floor_path = os.path.join(TEX_DIR, f"floor_{chapter_index}_v5.png")
-    metal_path = os.path.join(TEX_DIR, f"metal_{chapter_index}_v5.png")
+    wall_path = os.path.join(TEX_DIR, f"wall_{chapter_index}_v6.png")
+    floor_path = os.path.join(TEX_DIR, f"floor_{chapter_index}_v6.png")
+    metal_path = os.path.join(TEX_DIR, f"metal_{chapter_index}_v6.png")
     if all(os.path.exists(p) and os.path.getsize(p) > 12000 for p in (wall_path, floor_path, metal_path)):
         return wall_path, floor_path, metal_path
 
@@ -340,6 +340,162 @@ def build_chapter_textures(chapter_index: int, style: dict) -> tuple[str, str, s
         md.ellipse((x-r, y-r, x+r, y+r), fill=_shade(tc, random.choice((-55, -38, -20, 28))))
     blend_noise(metal, .09).save(metal_path, optimize=True)
     return wall_path, floor_path, metal_path
+
+
+def build_chapter_detail_textures(chapter_index: int, style: dict) -> tuple[str, str]:
+    """Create a distinct damaged wall variant and a chapter-specific ceiling."""
+    alt_path = os.path.join(TEX_DIR, f"wall_alt_{chapter_index}_v6.png")
+    ceiling_path = os.path.join(TEX_DIR, f"ceiling_{chapter_index}_v6.png")
+    if all(os.path.exists(p) and os.path.getsize(p) > 9000 for p in (alt_path, ceiling_path)):
+        return alt_path, ceiling_path
+
+    size = 512
+    wc, fc, tc = style["wall"], style["floor"], style["trim"]
+    mode = style["room_style"]
+    rng = random.Random(6300 + chapter_index * 97)
+
+    # Secondary wall material is deliberately unlike the primary wall map.
+    alt = Image.new("RGB", (size, size), _shade(wc, -17))
+    d = ImageDraw.Draw(alt)
+    if mode == "wood":
+        # Peeling wallpaper over old timber, torn seams and water marks.
+        for y in range(0, size, 86):
+            base = _shade(wc, rng.randint(-12, 10))
+            d.rectangle((0, y, size, y + 78), fill=base)
+            d.line((0, y + 78, size, y + 78), fill=_shade(wc, -42), width=4)
+            for x in range(rng.randrange(12, 42), size, 96):
+                d.rectangle((x, y + 8, min(size, x + rng.randrange(28, 70)), y + 68),
+                            fill=_shade(base, rng.choice((-20, -12, 9))))
+        for _ in range(26):
+            x, y = rng.randrange(size), rng.randrange(size)
+            d.polygon([(x, y), (min(size-1, x+40), y+6),
+                       (min(size-1, x+24), min(size-1, y+55))],
+                      fill=_shade(wc, -37))
+    elif mode == "tile":
+        # Hospital wall: glazed tiles, discoloured grout and fine cracks.
+        for y in range(0, size, 72):
+            offset = 0 if (y // 72) % 2 == 0 else 36
+            for x in range(-72 + offset, size, 72):
+                x0, x1 = max(0, x+3), min(size-1, x+67)
+                d.rounded_rectangle((x0, y+3, x1, min(size-1, y+67)), radius=4,
+                                    fill=_shade(wc, rng.randint(-18, 5)),
+                                    outline=_shade(wc, -39), width=3)
+                d.line((x0+5, y+8, x1-5, y+8), fill=_shade(wc, 19), width=2)
+        for _ in range(20):
+            x, y = rng.randrange(size), rng.randrange(size)
+            d.line((x, y, min(size-1, x+rng.randrange(8, 42)),
+                    min(size-1, y+rng.randrange(8, 54))), fill=_shade(wc, -44), width=2)
+    elif mode == "bark":
+        # Forest station: bark-like vertical fibres with moss islands.
+        for x in range(-10, size, 24):
+            xx = x + rng.randrange(-7, 8)
+            d.line((xx, 0, xx+rng.randrange(-16, 16), size),
+                   fill=_shade(wc, rng.choice((-42, -28, 18))), width=rng.randrange(2, 8))
+        for _ in range(58):
+            x, y = rng.randrange(size), rng.randrange(size)
+            rx, ry = rng.randrange(5, 24), rng.randrange(4, 15)
+            d.ellipse((x-rx, y-ry, x+rx, y+ry), fill=_shade((77, 91, 54), rng.randrange(-12, 14)))
+    elif mode == "concrete":
+        # Silo concrete: formwork seams, branching cracks and rust streaks.
+        for y in (96, 220, 370, 486):
+            d.line((0, y, size, y), fill=_shade(wc, -39), width=5)
+            d.line((0, y+5, size, y+5), fill=_shade(wc, 12), width=2)
+        for _ in range(26):
+            x, y = rng.randrange(size), rng.randrange(size)
+            points = [(x, y)]
+            for _ in range(rng.randrange(3, 7)):
+                x = max(0, min(size-1, x+rng.randrange(-18, 19)))
+                y = max(0, min(size-1, y+rng.randrange(9, 28)))
+                points.append((x, y))
+            d.line(points, fill=_shade(wc, -48), width=2)
+        for _ in range(16):
+            x, y = rng.randrange(size), rng.randrange(size)
+            d.line((x, y, x+rng.randrange(-5, 6), min(size-1, y+70)),
+                   fill=(91, 53, 37), width=rng.randrange(2, 5))
+    else:
+        # Clock tower: dark lacquer panels, brass inlay and circular gear marks.
+        for y in range(0, size, 80):
+            d.rectangle((0, y, size, y+75), fill=_shade(wc, rng.randrange(-14, 3)))
+            d.line((0, y, size, y), fill=_shade(tc, -21), width=4)
+            for x in range(40, size, 128):
+                d.rectangle((x, y+13, x+72, y+64), outline=_shade(tc, 5), width=3)
+                d.ellipse((x+21, y+24, x+51, y+54), outline=_shade(tc, -8), width=2)
+                d.ellipse((x+33, y+36, x+39, y+42), fill=_shade(tc, 20))
+
+    for _ in range(100):
+        x, y = rng.randrange(size), rng.randrange(size)
+        r = rng.randrange(2, 15)
+        d.ellipse((x-r, y-r, x+r, y+r), fill=_shade(wc, rng.choice((-40, -26, -14, 10))))
+    blend_noise(alt, .16).save(alt_path, optimize=True)
+
+    # Ceiling is a separate material, never another copy of the wall.
+    ceiling_base = _shade(wc, -31)
+    ceiling = Image.new("RGB", (size, size), ceiling_base)
+    cd = ImageDraw.Draw(ceiling)
+    if mode in ("wood", "clock"):
+        for y in range(0, size, 96):
+            cd.rectangle((0, y, size, y+88), fill=_shade(ceiling_base, rng.randrange(-8, 5)))
+            cd.line((0, y, size, y), fill=_shade(tc, -25), width=5)
+            for x in range(28, size, 128):
+                cd.line((x, y+12, x, y+80), fill=_shade(tc, -32), width=3)
+    elif mode == "tile":
+        for y in range(0, size, 64):
+            cd.line((0, y, size, y), fill=_shade(ceiling_base, -27), width=3)
+        for x in range(0, size, 128):
+            cd.line((x, 0, x, size), fill=_shade(ceiling_base, -24), width=3)
+        for _ in range(42):
+            x, y = rng.randrange(size), rng.randrange(size)
+            cd.ellipse((x-10, y-4, x+10, y+4), fill=(29, 39, 39))
+    elif mode == "bark":
+        for x in range(0, size, 38):
+            cd.line((x, 0, x+rng.randrange(-20, 20), size), fill=_shade(ceiling_base, rng.choice((-21, -10, 8))), width=8)
+        for _ in range(45):
+            x, y = rng.randrange(size), rng.randrange(size)
+            cd.ellipse((x-16, y-8, x+16, y+8), fill=(31, 43, 28))
+    else:
+        for y in range(0, size, 80):
+            cd.line((0, y, size, y), fill=_shade(ceiling_base, -25), width=4)
+        for x in range(0, size, 128):
+            cd.line((x, 0, x, size), fill=_shade(ceiling_base, -25), width=4)
+        for _ in range(36):
+            x, y = rng.randrange(size), rng.randrange(size)
+            cd.line((x, y, min(size-1, x+30), min(size-1, y+52)), fill=_shade(ceiling_base, -40), width=2)
+    blend_noise(ceiling, .12).save(ceiling_path, optimize=True)
+    return alt_path, ceiling_path
+
+
+def build_jumpscare_texture() -> str:
+    """Stylised, non-graphic close-up face used for a very brief scare flash."""
+    path = os.path.join(TEX_DIR, "stalker_face_v1.png")
+    if os.path.exists(path) and os.path.getsize(path) > 9000:
+        return path
+    size = 512
+    img = Image.new("RGBA", (size, size), (5, 7, 9, 255))
+    d = ImageDraw.Draw(img)
+    rng = random.Random(19041)
+    # Shadowed hood and a narrow, distorted mask-like face.
+    d.ellipse((56, 8, 456, 520), fill=(13, 16, 18, 255), outline=(52, 54, 48, 255), width=12)
+    d.polygon([(104, 96), (206, 46), (306, 49), (408, 130), (365, 442), (146, 445)],
+              fill=(26, 30, 29, 255))
+    d.ellipse((137, 135, 374, 423), fill=(54, 57, 51, 255), outline=(84, 82, 69, 255), width=8)
+    d.polygon([(146, 170), (228, 194), (205, 239), (142, 230)], fill=(4, 6, 8, 255))
+    d.polygon([(366, 170), (285, 194), (308, 239), (369, 230)], fill=(4, 6, 8, 255))
+    d.ellipse((174, 190, 205, 216), fill=(210, 185, 126, 255))
+    d.ellipse((308, 190, 339, 216), fill=(210, 185, 126, 255))
+    d.ellipse((185, 198, 197, 210), fill=(255, 228, 177, 255))
+    d.ellipse((317, 198, 329, 210), fill=(255, 228, 177, 255))
+    d.polygon([(243, 214), (275, 214), (264, 302), (246, 302)], fill=(8, 10, 11, 255))
+    d.ellipse((195, 289, 322, 390), fill=(5, 6, 7, 255), outline=(106, 93, 74, 255), width=7)
+    for x in range(205, 316, 14):
+        d.polygon([(x, 295), (x+9, 296), (x+6, 326), (x+2, 326)], fill=(176, 166, 142, 255))
+    for _ in range(210):
+        x, y = rng.randrange(size), rng.randrange(size)
+        shade = rng.randrange(8, 48)
+        d.line((x, y, min(size-1, x+rng.randrange(2, 18)), min(size-1, y+rng.randrange(-6, 8))),
+               fill=(shade, shade, shade, rng.randrange(35, 110)), width=1)
+    img = img.filter(ImageFilter.GaussianBlur(.55))
+    img.save(path)
+    return path
 
 
 def build_audio_files() -> None:
