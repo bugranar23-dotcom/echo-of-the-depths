@@ -38,11 +38,17 @@ try:
         Fog,
     )
     from PIL import Image, ImageDraw, ImageChops
+    # Ursina does not register a built-in model named "cylinder".
+    # Use its procedural Cylinder mesh instead.
+    from ursina.models.procedural.cylinder import Cylinder as UrsinaCylinder
 except ImportError as exc:
     print("Gerekli kutuphane bulunamadi:", exc)
     print("Terminalde su komutu calistir: py -m pip install ursina pillow")
     input("Cikmak icin Enter...")
     raise SystemExit(1)
+
+# Tek bir paylasilan, prosedurel silindir modeli; tum esyalar bunu kullanir.
+CYLINDER_MODEL = UrsinaCylinder(resolution=12, start=-0.5)
 
 # -----------------------------------------------------------------------------
 # Genel ayarlar
@@ -314,9 +320,9 @@ hand = Entity(parent=camera, position=(-.34, -.34, .42), rotation=(0, 0, -12))
 Entity(parent=hand, model="sphere", scale=(.16, .12, .22), position=(0, 0, .03), color=hx("#b88768"))
 Entity(parent=hand, model="cube", scale=(.14, .16, .28), position=(0, -.015, -.12), color=hx("#29313a"))
 torch = Entity(parent=camera, position=(.28, -.24, .55), rotation=(0, 0, -5))
-Entity(parent=torch, model="cylinder", scale=(.105, .38, .105), rotation_x=90, color=hx("#252a30"))
-Entity(parent=torch, model="cylinder", scale=(.15, .10, .15), position=(0, 0, .20), rotation_x=90, color=hx("#9ca5a7"))
-Entity(parent=torch, model="cylinder", scale=(.12, .07, .12), position=(0, 0, .255), rotation_x=90, color=hx("#d8d7c8"))
+Entity(parent=torch, model=CYLINDER_MODEL, scale=(.105, .38, .105), rotation_x=90, color=hx("#252a30"))
+Entity(parent=torch, model=CYLINDER_MODEL, scale=(.15, .10, .15), position=(0, 0, .20), rotation_x=90, color=hx("#9ca5a7"))
+Entity(parent=torch, model=CYLINDER_MODEL, scale=(.12, .07, .12), position=(0, 0, .255), rotation_x=90, color=hx("#d8d7c8"))
 Entity(parent=torch, model="cube", scale=(.10, .035, .045), position=(0, -.08, .06), color=hx("#a9813e"))
 
 # UI panelleri
@@ -468,7 +474,7 @@ def add_box(x: float, y: float, z: float, sx: float, sy: float, sz: float,
 
 
 def add_cylinder(x: float, y: float, z: float, scale, tint, rotation=(0, 0, 0), parent=None):
-    return Entity(parent=parent if parent is not None else world_root, model="cylinder", position=(x, y, z),
+    return Entity(parent=parent if parent is not None else world_root, model=CYLINDER_MODEL, position=(x, y, z),
                   scale=scale, color=palette_color(tint), rotation=rotation)
 
 
@@ -670,7 +676,7 @@ def build_lamps(style: dict):
         if rng.random() < .42:
             cx, cz = room_center(room)
             room_lights.append((cx, cz, rng.random() * 10))
-            Entity(parent=world_root, model="cylinder", position=(cx, WALL_H - .15, cz),
+            Entity(parent=world_root, model=CYLINDER_MODEL, position=(cx, WALL_H - .15, cz),
                    scale=(.72, .10, .72), color=hx("#262a2c"))
             Entity(parent=world_root, model="sphere", position=(cx, WALL_H - .38, cz),
                    scale=(.28, .12, .28), color=palette_color(style["glow"]))
@@ -767,20 +773,20 @@ def build_pickup_model(kind: str, pos: tuple[float, float], style: dict):
     root = Entity(parent=world_root, position=(x, .45, z))
     tint = style["glow"]
     if kind == "sigorta":
-        Entity(parent=root, model="cylinder", scale=(.20, .54, .20), color=hx("#d4a34d"))
+        Entity(parent=root, model=CYLINDER_MODEL, scale=(.20, .54, .20), color=hx("#d4a34d"))
         Entity(parent=root, model="cube", scale=(.23, .12, .24), y=.20, color=hx("#30383a"))
         Entity(parent=root, model="cube", scale=(.06, .14, .06), y=.33, color=hx("#f3d58d"))
     elif kind == "disk":
-        Entity(parent=root, model="cylinder", scale=(.48, .10, .48), color=hx("#a5b9b2"))
-        Entity(parent=root, model="cylinder", scale=(.16, .12, .16), color=hx("#33474a"))
+        Entity(parent=root, model=CYLINDER_MODEL, scale=(.48, .10, .48), color=hx("#a5b9b2"))
+        Entity(parent=root, model=CYLINDER_MODEL, scale=(.16, .12, .16), color=hx("#33474a"))
         Entity(parent=root, model="sphere", scale=.07, y=.08, color=palette_color(tint))
     elif kind == "role":
         Entity(parent=root, model="cube", scale=(.36, .46, .22), color=hx("#526b48"))
         Entity(parent=root, model="cube", scale=(.24, .08, .05), y=.08, z=-.13, color=palette_color(tint))
         Entity(parent=root, model="sphere", scale=.10, y=.24, z=-.14, color=hx("#d9ecad"))
-        Entity(parent=root, model="cylinder", scale=(.035, .32, .035), y=.35, color=hx("#afb9a3"))
+        Entity(parent=root, model=CYLINDER_MODEL, scale=(.035, .32, .035), y=.35, color=hx("#afb9a3"))
     elif kind == "vana":
-        Entity(parent=root, model="cylinder", scale=(.17, .32, .17), color=hx("#87949b"))
+        Entity(parent=root, model=CYLINDER_MODEL, scale=(.17, .32, .17), color=hx("#87949b"))
         make_ring(0, .10, 0, .30, tint, parent=root, thickness=.045)
         for angle in range(0, 360, 90):
             a = math.radians(angle)
@@ -788,7 +794,7 @@ def build_pickup_model(kind: str, pos: tuple[float, float], style: dict):
                    position=(math.sin(a) * .23, .10, math.cos(a) * .23), rotation_y=angle, color=hx("#b8c2c2"))
     else:
         make_ring(0, 0, 0, .27, tint, parent=root, thickness=.055)
-        Entity(parent=root, model="cylinder", scale=(.12, .28, .12), color=hx("#b69b65"))
+        Entity(parent=root, model=CYLINDER_MODEL, scale=(.12, .28, .12), color=hx("#b69b65"))
         Entity(parent=root, model="cube", scale=(.08, .28, .08), rotation_z=45, color=hx("#e5ca8b"))
     ring = make_ring(x, .05, z, .32, tint, thickness=.055)
     glow = Entity(parent=world_root, model="sphere", position=(x, .45, z), scale=.72, color=color.rgba(tint[0], tint[1], tint[2], 28), unlit=True)
