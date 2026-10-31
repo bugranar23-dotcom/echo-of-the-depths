@@ -616,7 +616,7 @@ def make_wall_segment(axis: str, fixed: float, start: float, end: float, wall_te
         cx, cz, w, d = fixed, mid, WALL_T, length
     static_entity(parent=room_parent(cx, cz), model="cube", position=pos, scale=scale,
            texture=wall_tex, texture_scale=(max(1, length / 2.8), WALL_H / 2.8),
-           color=color.white)
+           color=color.rgb(158, 145, 126))
     add_collider(cx, cz, w, d)
     # Duvar diplerinde ahsap/metal supurgelik.
     if axis == "x":
@@ -909,8 +909,10 @@ def build_world():
     # Zemin ve tavan: her oda ayri chunk icinde tutulur.
     for room in range(GRID * GRID):
         cx, cz = room_center(room)
-        static_entity(parent=room_nodes[room], model="plane", position=(cx, .018, cz), scale=(CELL, 1, CELL),
-               texture=floor_tex, texture_scale=(2.8, 2.8), color=color.white, double_sided=True)
+        # A solid slab guarantees a visible, dark floor even if a graphics
+        # backend fails to sample the generated PNG texture.
+        static_entity(parent=room_nodes[room], model="cube", position=(cx, -.16, cz), scale=(CELL, .32, CELL),
+               texture=floor_tex, texture_scale=(2.8, 2.8), color=palette_color(style["floor"]))
         static_entity(parent=room_nodes[room], model="plane", position=(cx, WALL_H, cz), rotation_x=180,
                scale=(CELL, 1, CELL), texture=wall_tex, texture_scale=(2.8, 2.8),
                color=hx("#b0a99b"), double_sided=True)
