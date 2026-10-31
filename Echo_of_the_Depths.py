@@ -513,8 +513,10 @@ def palette_color(value):
 
 
 def static_entity(*args, **kwargs):
-    """Render geometry without adding it to Ursina's per-frame entity update list."""
-    kwargs.setdefault("add_to_scene_entities", False)
+    """Create a normal visible Ursina entity; room chunks handle visibility."""
+    # Ursina 8.3 scene registration is required for reliable rendering of
+    # parented geometry across all supported graphics backends.
+    kwargs["add_to_scene_entities"] = True
     return Entity(*args, **kwargs)
 
 
