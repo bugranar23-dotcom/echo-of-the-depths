@@ -1698,7 +1698,14 @@ def update():
             caught_by_enemy()
 
     # Fare/kamera.
-    mx, my = mouse.velocity
+    # Ursina surumune gore mouse.velocity 2 veya 3 bilesenli olabilir.
+    # Sadece yatay/dikey hareketi kullan; tum vektoru iki degiskene acma.
+    mouse_delta = mouse.velocity
+    try:
+        mx = float(mouse_delta[0])
+        my = float(mouse_delta[1])
+    except (TypeError, IndexError, KeyError):
+        mx = my = 0.0
     player.rotation_y += mx * 45
     camera_pitch = max(-82, min(82, camera_pitch - my * 42))
     camera.rotation_x = camera_pitch
