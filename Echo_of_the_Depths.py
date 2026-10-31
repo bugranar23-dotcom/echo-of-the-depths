@@ -880,7 +880,7 @@ def build_world():
     global room_stream_last, selected_lamps, lamp_refresh_timer
     if world_root is not None:
         destroy(world_root)
-    world_root = static_entity(name="chapter-world")
+    world_root = Entity(name="chapter-world")
     wall_colliders = []
     furniture_colliders = []
     room_active = set()
@@ -895,8 +895,10 @@ def build_world():
     make_maze()
     # Chunk'lar once gorunur kurulur. Ilk stream turu oyuncu konumuna gore
     # guvenli alanlari acik birakir; kapali parent nedeniyle bos/beyaz sahne olusmaz.
+    # Normal Entity dugumleri Panda/Ursina sahne agacinda acikca kayitli kalir.
+    # Oda meshleri yine statik Entity olarak tutulur; chunk anahtari yalnizca gorunurlugu yonetir.
     room_nodes = [
-        static_entity(parent=world_root, name=f"room_chunk_{room}", enabled=True)
+        Entity(parent=world_root, name=f"room_chunk_{room}", enabled=True)
         for room in range(GRID * GRID)
     ]
     wall_colliders_by_room = [[] for _ in range(GRID * GRID)]
