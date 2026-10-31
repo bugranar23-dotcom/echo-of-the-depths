@@ -45,3 +45,7 @@ py -3.12 Echo_of_the_Depths.py
 
 ## Sorun giderme
 Oyun hata ile kapanirsa ayni klasordeki `echo_hata.txt` dosyasini paylas. Python sozdizimi ve ZIP icerigi kontrol edilmistir; bu ortamda Ursina olmadigi icin gercek 3B acilis/FPS testi yapilamadi.
+
+## Son hata duzeltmesi
+- Yaratigin boynuzlari icin Ursina'nin prosedurel `Cone` modeli import edildi; `missing model: 'cone'` uyarisi giderildi.
+- Panda3D sis rengi `Fog.setColor(r, g, b)` seklinde cagriliyor; alfa parametresi kaldirildi ve bolum acilisindaki TypeError duzeltildi.
