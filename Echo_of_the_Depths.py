@@ -888,6 +888,12 @@ def build_world():
     if world_root is not None:
         destroy(world_root)
     world_root = Entity(name="chapter-world")
+    # CI visual diagnostic: a high-contrast wall in the player's direct view.
+    # This is not present in normal gameplay.
+    if os.environ.get("ECHO_VISUAL_DEBUG") == "1":
+        Entity(parent=scene, model="cube", name="visual-debug-wall",
+               position=(CELL / 2, 1.7, CELL + 1.0),
+               scale=(8.0, 3.4, .35), color=color.rgb(105, 35, 28))
     wall_colliders = []
     furniture_colliders = []
     room_active = set()
