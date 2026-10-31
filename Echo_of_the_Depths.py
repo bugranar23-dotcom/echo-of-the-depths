@@ -561,10 +561,6 @@ scare_overlay = None
 jumpscare_timer = 0.0
 jumpscare_cooldown = 0.0
 ambient_event_timer = 18.0
-scare_overlay = None
-jumpscare_timer = 0.0
-jumpscare_cooldown = 0.0
-ambient_event_timer = 18.0
 
 
 def initialize_audio() -> None:
@@ -575,14 +571,19 @@ def initialize_audio() -> None:
         return
     audio_initialized = True
     try:
-        ambience_audio = Audio(os.path.join(SFX_DIR, "ambience.wav"), autoplay=True, loop=True, volume=.22)
-        step_audio = Audio(os.path.join(SFX_DIR, "step.wav"), autoplay=False, volume=.35)
-        pulse_audio = Audio(os.path.join(SFX_DIR, "pulse.wav"), autoplay=False, volume=.6)
-        sting_audio = Audio(os.path.join(SFX_DIR, "sting.wav"), autoplay=False, volume=.8)
-        pickup_audio = Audio(os.path.join(SFX_DIR, "pickup.wav"), autoplay=False, volume=.44)
-        knock_audio = Audio(os.path.join(SFX_DIR, "knock.wav"), autoplay=False, volume=.18)
-        whisper_audio = Audio(os.path.join(SFX_DIR, "whisper.wav"), autoplay=False, volume=.15)
-        jumpscare_audio = Audio(os.path.join(SFX_DIR, "jumpscare.wav"), autoplay=False, volume=.62)
+        # Ursina's Audio loader resolves paths against asset_folder. Use relative
+        # paths from the project root instead of absolute Windows drive paths.
+        def sound_file(name: str) -> str:
+            return os.path.relpath(os.path.join(SFX_DIR, name + ".wav"), BASE_DIR).replace("\\", "/")
+
+        ambience_audio = Audio(sound_file("ambience"), autoplay=True, loop=True, volume=.22)
+        step_audio = Audio(sound_file("step"), autoplay=False, volume=.35)
+        pulse_audio = Audio(sound_file("pulse"), autoplay=False, volume=.6)
+        sting_audio = Audio(sound_file("sting"), autoplay=False, volume=.8)
+        pickup_audio = Audio(sound_file("pickup"), autoplay=False, volume=.44)
+        knock_audio = Audio(sound_file("knock"), autoplay=False, volume=.18)
+        whisper_audio = Audio(sound_file("whisper"), autoplay=False, volume=.15)
+        jumpscare_audio = Audio(sound_file("jumpscare"), autoplay=False, volume=.62)
     except Exception:
         ambience_audio = step_audio = pulse_audio = sting_audio = pickup_audio = None
         knock_audio = whisper_audio = jumpscare_audio = None

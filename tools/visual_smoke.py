@@ -71,6 +71,17 @@ def main() -> None:
     except Exception as exc:
         fail(f"Could not capture the game window: {type(exc).__name__}: {exc}", process)
 
+    audio_dir = ROOT / "echo_assets" / "audio"
+    required_audio = ["ambience.wav", "step.wav", "pulse.wav", "sting.wav",
+                      "pickup.wav", "knock.wav", "whisper.wav", "jumpscare.wav"]
+    missing_audio = [name for name in required_audio if not (audio_dir / name).is_file()]
+    if missing_audio:
+        fail("Generated audio files are missing: " + ", ".join(missing_audio), process)
+
+    log_text = LOG.read_text(encoding="utf-8", errors="replace") if LOG.exists() else ""
+    if "no audio found with name:" in log_text:
+        fail("Ursina could not resolve a generated audio file path.", process)
+
     image = Image.open(SHOT).convert("RGB")
     stats = ImageStat.Stat(image)
     if max(stats.stddev) < 8:
