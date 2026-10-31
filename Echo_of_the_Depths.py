@@ -814,7 +814,7 @@ class Stalker:
         Entity(parent=self.head, model="sphere", scale=(.33, .20, .12), position=(0, -.13, .20), color=dark)
         eye_tint = style["enemy_eye"]
         for sx in (-.12, .12):
-            Entity(parent=self.head, model="sphere", position=(sx, .06, .205), scale=(.075, .055, .045), color=eye_tint, unlit=True)
+            Entity(parent=self.head, model="sphere", position=(sx, .06, .205), scale=(.075, .055, .045), color=palette_color(eye_tint), unlit=True)
         # Omuz cikintilari ve uzun kollar.
         self.arm_l = Entity(parent=self.torso, position=(-.32, .30, 0))
         self.arm_r = Entity(parent=self.torso, position=(.32, .30, 0))
