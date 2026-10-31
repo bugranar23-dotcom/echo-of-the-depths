@@ -70,7 +70,7 @@ random.seed()
 
 app = Ursina(title=APP_NAME)
 window.title = APP_NAME
-window.color = color.rgb(7, 10, 14)
+window.color = color.rgb32(7, 10, 14)
 # Panda3D sahne temizleme rengini de ayarla; beyaz bos ekran gorunmesini engeller.
 application.base.setBackgroundColor(0.012, 0.018, 0.026, 1.0)
 window.fps_counter.enabled = True
@@ -164,9 +164,9 @@ def _shade(rgb, delta):
 
 def build_chapter_textures(chapter_index: int, style: dict) -> tuple[str, str, str]:
     """Bolume gore 512px, katmanli ve tekrar edilebilir duvar/zemin/metal dokulari."""
-    wall_path = os.path.join(TEX_DIR, f"wall_{chapter_index}_v2.png")
-    floor_path = os.path.join(TEX_DIR, f"floor_{chapter_index}_v2.png")
-    metal_path = os.path.join(TEX_DIR, f"metal_{chapter_index}_v2.png")
+    wall_path = os.path.join(TEX_DIR, f"wall_{chapter_index}_v3.png")
+    floor_path = os.path.join(TEX_DIR, f"floor_{chapter_index}_v3.png")
+    metal_path = os.path.join(TEX_DIR, f"metal_{chapter_index}_v3.png")
     if all(os.path.exists(p) and os.path.getsize(p) > 12000 for p in (wall_path, floor_path, metal_path)):
         return wall_path, floor_path, metal_path
 
@@ -397,7 +397,7 @@ hud_progress = Text(parent=camera.ui, text="", position=(.60, .465), scale=.74, 
 
 # Ilk pencere gorunur gorunmez kullaniciya yukleme ekrani goster.
 startup_panel = Entity(parent=camera.ui, model="quad", scale=(1.65, .52),
-                        color=color.rgba(5, 8, 10, 238), z=-1)
+                        color=color.rgba32(5, 8, 10, 238), z=-1)
 startup_title = Text(parent=camera.ui, text=APP_NAME, origin=(0, 0),
                      position=(0, .075), scale=1.45, color=hx("#e5d1a2"))
 startup_message = Text(parent=camera.ui, text="Ilk bolumun dosyalari hazirlaniyor...",
@@ -406,16 +406,16 @@ startup_message = Text(parent=camera.ui, text="Ilk bolumun dosyalari hazirlaniyo
 
 stamina_back = Entity(parent=camera.ui, model="quad", position=(0, -.405), scale=(.27, .009), color=hx("#2a2927"))
 stamina_bar = Entity(parent=camera.ui, model="quad", position=(0, -.405), scale=(.27, .006), color=hx("#c6a35d"))
-map_back = Entity(parent=camera.ui, model="quad", position=(.67, .17), scale=(.34, .32), color=color.rgba(8, 12, 13, 220), enabled=False)
+map_back = Entity(parent=camera.ui, model="quad", position=(.67, .17), scale=(.34, .32), color=color.rgba32(8, 12, 13, 220), enabled=False)
 map_text = Text(parent=camera.ui, text="", position=(.51, .28), scale=.56, color=hx("#c9d4b4"), enabled=False)
 
 fade = Entity(parent=camera.ui, model="quad", scale=2, color=color.black, z=-2)
 fade.alpha = 0
-card_back = Entity(parent=camera.ui, model="quad", scale=(1.25, .50), color=color.rgba(6, 8, 9, 225), z=-1, enabled=False)
+card_back = Entity(parent=camera.ui, model="quad", scale=(1.25, .50), color=color.rgba32(6, 8, 9, 225), z=-1, enabled=False)
 card_title = Text(parent=camera.ui, text="", origin=(0, 0), position=(0, .11), scale=1.55, color=hx("#e9d6aa"), enabled=False)
 card_body = Text(parent=camera.ui, text="", origin=(0, 0), position=(0, -.015), scale=.85, color=hx("#d2d0c6"), enabled=False)
 card_sub = Text(parent=camera.ui, text="", origin=(0, 0), position=(0, -.16), scale=.66, color=hx("#a7b7a7"), enabled=False)
-puzzle_back = Entity(parent=camera.ui, model="quad", scale=(1.22, .76), color=color.rgba(7, 11, 14, 246), z=-1, enabled=False)
+puzzle_back = Entity(parent=camera.ui, model="quad", scale=(1.22, .76), color=color.rgba32(7, 11, 14, 246), z=-1, enabled=False)
 puzzle_title = Text(parent=camera.ui, text="", origin=(0, 0), position=(0, .27), scale=1.28, color=hx("#e2c88e"), enabled=False)
 puzzle_clue = Text(parent=camera.ui, text="", origin=(0, 0), position=(0, .09), scale=.78, color=hx("#d9ddd2"), enabled=False)
 puzzle_progress = Text(parent=camera.ui, text="", origin=(0, 0), position=(0, -.08), scale=1.12, color=hx("#e5d1a2"), enabled=False)
@@ -508,15 +508,13 @@ def add_world(entity):
 def palette_color(value):
     """Convert 0-255 RGB tuples to Ursina Color objects."""
     if isinstance(value, tuple) and len(value) == 3 and max(value) > 1:
-        return color.rgb(int(value[0]), int(value[1]), int(value[2]))
+        return color.rgb32(int(value[0]), int(value[1]), int(value[2]))
     return value
 
 
 def static_entity(*args, **kwargs):
-    """Create a normal visible Ursina entity; room chunks handle visibility."""
-    # Ursina 8.3 scene registration is required for reliable rendering of
-    # parented geometry across all supported graphics backends.
-    kwargs["add_to_scene_entities"] = True
+    """Render static geometry without an update callback every frame."""
+    kwargs.setdefault("add_to_scene_entities", False)
     return Entity(*args, **kwargs)
 
 
@@ -546,13 +544,9 @@ def room_key(a: int, b: int) -> tuple[int, int]:
 
 
 def room_parent(x: float, z: float):
-    """Use one world parent while rendering is stabilized.
-
-    The previous per-room parent hierarchy caused the room meshes to disappear
-    on some Panda3D backends even while their chunk nodes were enabled.
-    Keep geometry directly under the chapter root; visibility optimization can
-    be reintroduced after the renderer is verified on target machines.
-    """
+    """Return the streaming chunk that owns this world-space position."""
+    if room_nodes:
+        return room_nodes[room_at(x, z)]
     return world_root
 
 
@@ -620,7 +614,7 @@ def make_wall_segment(axis: str, fixed: float, start: float, end: float, wall_te
         cx, cz, w, d = fixed, mid, WALL_T, length
     static_entity(parent=room_parent(cx, cz), model="cube", position=pos, scale=scale,
            texture=wall_tex, texture_scale=(max(1, length / 2.8), WALL_H / 2.8),
-           color=color.rgb(158, 145, 126))
+           color=color.rgb32(158, 145, 126))
     add_collider(cx, cz, w, d)
     # Duvar diplerinde ahsap/metal supurgelik.
     if axis == "x":
@@ -838,17 +832,15 @@ def build_exit_gate(style: dict):
 
 
 def update_room_streaming(force: bool = False) -> None:
-    """Temporarily keep the complete chapter visible while renderer is stabilized."""
+    """Keep the player's nearby rooms, view cone and monster's area enabled."""
     global room_stream_last, room_active
-    room_active = set(range(GRID * GRID))
-    room_stream_last = chapter_clock
-    return
+    if not room_nodes:
+        return
     if not force and chapter_clock - room_stream_last < .15:
         return
     room_stream_last = chapter_clock
 
     px, pz = player.x, player.z
-    # 3x3 safety bubble around player; the camera cone adds only nearby forward chunks.
     active = set(nearby_room_ids(px, pz, 1))
     yaw = math.radians(player.rotation_y)
     fx, fz = math.sin(yaw), math.cos(yaw)
@@ -863,23 +855,13 @@ def update_room_streaming(force: bool = False) -> None:
         if dot > .12:
             active.add(room_id)
 
-    # Enemy AI must keep its local navigation area visible even during long chases.
     if enemy is not None and enemy.root.enabled:
         active.update(nearby_room_ids(enemy.root.x, enemy.root.z, 1))
     active.add(room_at(px, pz))
-    if not active:
-        active.add(0)
 
     for room_id, node in enumerate(room_nodes):
-        should_enable = room_id in active
-        if should_enable:
-            node.enabled = True
-            node.show()
-        else:
-            node.enabled = False
-            node.hide()
+        node.enabled = room_id in active
     room_active = active
-
 
 def build_world():
     global world_root, wall_colliders, furniture_colliders, room_lights, console_pos, exit_pos
@@ -888,16 +870,6 @@ def build_world():
     if world_root is not None:
         destroy(world_root)
     world_root = Entity(name="chapter-world")
-    # CI visual diagnostic: a high-contrast wall in the player's direct view.
-    # This is not present in normal gameplay.
-    if os.environ.get("ECHO_VISUAL_DEBUG") == "1":
-        # Camera starts at (6, 1.68, 6), facing +Z. Put the probe well
-        # inside room zero, before its north wall, so no wall can occlude it.
-        Entity(parent=scene, model="cube", name="visual-debug-in-room",
-               position=(CELL / 2, 1.68, CELL / 2 + 2.2),
-               scale=(2.8, 2.8, .22),
-               color=color.rgb(190, 28, 24), unlit=True,
-               double_sided=True)
     wall_colliders = []
     furniture_colliders = []
     room_active = set()
@@ -1016,7 +988,7 @@ def build_pickup_model(kind: str, pos: tuple[float, float], style: dict):
         static_entity(parent=root, model=CYLINDER_MODEL, scale=(.12, .28, .12), color=hx("#b69b65"))
         static_entity(parent=root, model="cube", scale=(.08, .28, .08), rotation_z=45, color=hx("#e5ca8b"))
     ring = make_ring(x, .05, z, .32, tint, parent=chunk, thickness=.055)
-    glow = static_entity(parent=chunk, model="sphere", position=(x, .45, z), scale=.72, color=color.rgba(tint[0], tint[1], tint[2], 28), unlit=True)
+    glow = static_entity(parent=chunk, model="sphere", position=(x, .45, z), scale=.72, color=color.rgba32(tint[0], tint[1], tint[2], 28), unlit=True)
     return {"kind": kind, "root": root, "ring": ring, "glow": glow, "x": x, "z": z, "room": room_id, "phase": random.random() * 6}
 
 
@@ -1359,12 +1331,6 @@ def start_chapter():
     camera.position = (0, 1.68, 0)
     camera.rotation = (0, 0, 0)
     camera_pitch = 0
-    if os.environ.get("ECHO_VISUAL_DEBUG") == "1":
-        debug_pos = camera.world_position + camera.forward * 5.0
-        print(f"[ECHO DEBUG] camera={camera.world_position} forward={camera.forward} probe={debug_pos}", flush=True)
-        Entity(parent=scene, model="cube", name="visual-debug-forward-probe",
-               position=debug_pos, scale=(2.0, 2.0, 2.0),
-               color=color.rgb(180, 25, 25), unlit=True)
     scene.setFog(fog)
     fog.setColor(*(c / 255 for c in style["fog"]))
     fog.setExpDensity(.020 + chapter_index * .0025)
