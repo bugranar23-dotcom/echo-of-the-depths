@@ -805,7 +805,7 @@ def add_cylinder(x: float, y: float, z: float, scale, tint, rotation=(0, 0, 0), 
                   scale=scale, color=palette_color(tint), rotation=rotation)
 
 
-def make_wall_segment(axis: str, fixed: float, start: float, end: float, wall_tex, tint, metal_tex=None):
+def make_wall_segment(axis: str, fixed: float, start: float, end: float, wall_tex, tint, metal_tex=None, wall_alt_tex=None):
     if end - start <= .12:
         return
     mid = (start + end) / 2
@@ -818,9 +818,11 @@ def make_wall_segment(axis: str, fixed: float, start: float, end: float, wall_te
         pos = (fixed, WALL_H / 2, mid)
         scale = (WALL_T, WALL_H, length)
         cx, cz, w, d = fixed, mid, WALL_T, length
+    variation = int(abs(fixed * 17 + mid * 29 + chapter_index * 11)) % 5
+    surface_tex = wall_alt_tex if wall_alt_tex is not None and variation in (0, 3) else wall_tex
     static_entity(parent=room_parent(cx, cz), model="cube", position=pos, scale=scale,
-           texture=wall_tex, texture_scale=(max(1, length / 2.8), WALL_H / 2.8),
-           color=color.rgb32(158, 145, 126))
+           texture=surface_tex, texture_scale=(max(1, length / 2.8), WALL_H / 2.8),
+           color=color.rgb32(178, 165, 145))
     add_collider(cx, cz, w, d)
     # Duvar diplerinde ahsap/metal supurgelik.
     if axis == "x":
@@ -1084,6 +1086,7 @@ def build_world():
     lamp_refresh_timer = 0.0
     style = CHAPTERS[chapter_index]
     wall_path, floor_path, metal_path = build_chapter_textures(chapter_index + 1, style)
+    wall_alt_path, ceiling_path = build_chapter_detail_textures(chapter_index + 1, style)
     # Ursina load_texture searches relative to asset_folder; an absolute
     # filename silently returned None on some installations. Specify the
     # texture directory explicitly so all generated PNGs are actually loaded.
@@ -1091,9 +1094,12 @@ def build_world():
     wall_tex = load_texture(os.path.basename(wall_path), folder=texture_folder)
     floor_tex = load_texture(os.path.basename(floor_path), folder=texture_folder)
     metal_tex = load_texture(os.path.basename(metal_path), folder=texture_folder)
-    if not all((wall_tex, floor_tex, metal_tex)):
+    wall_alt_tex = load_texture(os.path.basename(wall_alt_path), folder=texture_folder)
+    ceiling_tex = load_texture(os.path.basename(ceiling_path), folder=texture_folder)
+    if not all((wall_tex, floor_tex, metal_tex, wall_alt_tex, ceiling_tex)):
         missing = [name for name, tex in (
-            ("wall", wall_tex), ("floor", floor_tex), ("metal", metal_tex)
+            ("wall", wall_tex), ("wall_alt", wall_alt_tex), ("floor", floor_tex),
+            ("metal", metal_tex), ("ceiling", ceiling_tex)
         ) if tex is None]
         raise RuntimeError("Doku dosyalari yuklenemedi: " + ", ".join(missing))
     make_maze()
@@ -1114,10 +1120,10 @@ def build_world():
         # A solid slab guarantees a visible, dark floor even if a graphics
         # backend fails to sample the generated PNG texture.
         static_entity(parent=room_nodes[room], model="cube", position=(cx, -.16, cz), scale=(CELL, .32, CELL),
-               texture=floor_tex, texture_scale=(2.8, 2.8), color=palette_color(style["floor"]))
+               texture=floor_tex, texture_scale=(3.8, 3.8), color=color.rgb32(165, 153, 137))
         static_entity(parent=room_nodes[room], model="plane", position=(cx, WALL_H, cz), rotation_x=180,
-               scale=(CELL, 1, CELL), texture=wall_tex, texture_scale=(2.8, 2.8),
-               color=hx("#b0a99b"), double_sided=True)
+               scale=(CELL, 1, CELL), texture=ceiling_tex, texture_scale=(2.6, 2.6),
+               color=color.rgb32(115, 107, 95), double_sided=True)
         # Tavan kirişi ve koselerde kolonlar.
         for sx in (-5.45, 5.45):
             add_box(cx + sx, WALL_H - .20, cz, .16, .34, CELL, style["trim"], metal_tex)
@@ -1132,14 +1138,14 @@ def build_world():
             linked = 0 < gx < GRID and b in room_graph[a]
             if linked:
                 gap = door_map[room_key(a, b)][1]
-                make_wall_segment("z", fixed, start, gap - DOOR_W / 2, wall_tex, style["trim"], metal_tex)
-                make_wall_segment("z", fixed, gap + DOOR_W / 2, end, wall_tex, style["trim"], metal_tex)
+                make_wall_segment("z", fixed, start, gap - DOOR_W / 2, wall_tex, style["trim"], metal_tex, wall_alt_tex)
+                make_wall_segment("z", fixed, gap + DOOR_W / 2, end, wall_tex, style["trim"], metal_tex, wall_alt_tex)
                 # Kapinin iki yaninda dekoratif kolon ve ust lento.
                 for dz in (-DOOR_W / 2, DOOR_W / 2):
                     add_box(fixed, WALL_H / 2, gap + dz, .48, WALL_H, .52, style["trim"], metal_tex)
                 add_box(fixed, WALL_H - .16, gap, .52, .32, DOOR_W, style["trim"], metal_tex)
             else:
-                make_wall_segment("z", fixed, start, end, wall_tex, style["trim"], metal_tex)
+                make_wall_segment("z", fixed, start, end, wall_tex, style["trim"], metal_tex, wall_alt_tex)
 
     # Yatay duvarlar.
     for gz in range(GRID + 1):
@@ -1151,18 +1157,18 @@ def build_world():
             linked = 0 < gz < GRID and b in room_graph[a]
             if linked:
                 gap = door_map[room_key(a, b)][0]
-                make_wall_segment("x", fixed, start, gap - DOOR_W / 2, wall_tex, style["trim"], metal_tex)
-                make_wall_segment("x", fixed, gap + DOOR_W / 2, end, wall_tex, style["trim"], metal_tex)
+                make_wall_segment("x", fixed, start, gap - DOOR_W / 2, wall_tex, style["trim"], metal_tex, wall_alt_tex)
+                make_wall_segment("x", fixed, gap + DOOR_W / 2, end, wall_tex, style["trim"], metal_tex, wall_alt_tex)
                 for dx in (-DOOR_W / 2, DOOR_W / 2):
                     add_box(gap + dx, WALL_H / 2, fixed, .52, WALL_H, .48, style["trim"], metal_tex)
                 add_box(gap, WALL_H - .16, fixed, DOOR_W, .32, .52, style["trim"], metal_tex)
             elif gz == 0 and rx == 0:
                 # Baslangic odasindaki cikis kapisi icin dis duvarda aciklik.
                 gap = CELL / 2
-                make_wall_segment("x", fixed, start, gap - DOOR_W / 2, wall_tex, style["trim"], metal_tex)
-                make_wall_segment("x", fixed, gap + DOOR_W / 2, end, wall_tex, style["trim"], metal_tex)
+                make_wall_segment("x", fixed, start, gap - DOOR_W / 2, wall_tex, style["trim"], metal_tex, wall_alt_tex)
+                make_wall_segment("x", fixed, gap + DOOR_W / 2, end, wall_tex, style["trim"], metal_tex, wall_alt_tex)
             else:
-                make_wall_segment("x", fixed, start, end, wall_tex, style["trim"], metal_tex)
+                make_wall_segment("x", fixed, start, end, wall_tex, style["trim"], metal_tex, wall_alt_tex)
 
     decorate_rooms(style, wall_tex, metal_tex)
     build_lamps(style)
@@ -1550,7 +1556,8 @@ def start_chapter():
     fog.setColor(*(c / 255 for c in style["fog"]))
     fog.setExpDensity(.020 + chapter_index * .0025)
     amb = style["ambient"]
-    ambient.setColor((min(1.0, amb[0] * 1.55 + .07), min(1.0, amb[1] * 1.55 + .07), min(1.0, amb[2] * 1.55 + .07), 1.0))
+    ambient.setColor((min(.16, amb[0] * .48 + .025), min(.16, amb[1] * .48 + .025),
+                      min(.16, amb[2] * .48 + .025), 1.0))
     spot.setColor((0, 0, 0, 1))
     update_hud()
     card_title.text = style["name"]
@@ -2002,7 +2009,8 @@ def update():
                 if threat > .45 and random.random() < dt * .8:
                     flicker *= .12
                 node.setPos(lx, WALL_H - .65, lz)
-                light.setColor((1.15 * flicker, .78 * flicker, .48 * flicker, 1))
+                glow_rgb = CHAPTERS[chapter_index]["glow"]
+                light.setColor(tuple((channel / 255.0) * .72 * flicker for channel in glow_rgb) + (1,))
                 scene.setLight(node)
             else:
                 light.setColor((0, 0, 0, 1))
