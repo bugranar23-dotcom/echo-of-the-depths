@@ -190,9 +190,9 @@ def _shade(rgb, delta):
 
 def build_chapter_textures(chapter_index: int, style: dict) -> tuple[str, str, str]:
     """Bolume gore 512px, katmanli ve tekrar edilebilir duvar/zemin/metal dokulari."""
-    wall_path = os.path.join(TEX_DIR, f"wall_{chapter_index}_v4.png")
-    floor_path = os.path.join(TEX_DIR, f"floor_{chapter_index}_v4.png")
-    metal_path = os.path.join(TEX_DIR, f"metal_{chapter_index}_v4.png")
+    wall_path = os.path.join(TEX_DIR, f"wall_{chapter_index}_v5.png")
+    floor_path = os.path.join(TEX_DIR, f"floor_{chapter_index}_v5.png")
+    metal_path = os.path.join(TEX_DIR, f"metal_{chapter_index}_v5.png")
     if all(os.path.exists(p) and os.path.getsize(p) > 12000 for p in (wall_path, floor_path, metal_path)):
         return wall_path, floor_path, metal_path
 
@@ -275,7 +275,17 @@ def build_chapter_textures(chapter_index: int, style: dict) -> tuple[str, str, s
         x, y = random.randrange(size), random.randrange(size)
         rx, ry = random.randrange(5, 32), random.randrange(4, 24)
         d.ellipse((x-rx, y-ry, x+rx, y+ry), fill=_shade(wc, random.choice((-24, -15, 12))))
-    blend_noise(wall, .10).save(wall_path, optimize=True)
+    # Fine scratches and hairline cracks are baked into the image (no frame cost).
+    for _ in range(150):
+        x, y = random.randrange(size), random.randrange(size)
+        length = random.randrange(5, 58)
+        d.line((x, y, min(size - 1, x + length), min(size - 1, y + random.choice((-2, -1, 0, 1, 2)))),
+               fill=_shade(wc, random.choice((-42, -30, -18, 16, 24))), width=1)
+    for _ in range(16):
+        x, y = random.randrange(size), random.randrange(size)
+        d.line((x, y, x + random.randrange(-18, 19), min(size - 1, y + random.randrange(12, 48))),
+               fill=_shade(wc, -34), width=2)
+    blend_noise(wall, .13).save(wall_path, optimize=True)
 
     floor = Image.new("RGB", (size, size), fc)
     fd = ImageDraw.Draw(floor)
@@ -301,7 +311,16 @@ def build_chapter_textures(chapter_index: int, style: dict) -> tuple[str, str, s
             x, y = random.randrange(size), random.randrange(size)
             r = random.randrange(2, 10)
             fd.ellipse((x-r, y-r, x+r, y+r), fill=_shade(fc, random.choice((-30, -18, 17))))
-    blend_noise(floor, .085).save(floor_path, optimize=True)
+    # Ground-in dirt and fine scuffs for close-up floor detail.
+    for _ in range(260):
+        x, y = random.randrange(size), random.randrange(size)
+        r = random.choice((1, 1, 2, 3))
+        fd.ellipse((x-r, y-r, x+r, y+r), fill=_shade(fc, random.choice((-34, -23, -12, 15))))
+    for _ in range(90):
+        x, y = random.randrange(size), random.randrange(size)
+        fd.line((x, y, min(size - 1, x + random.randrange(4, 42)), y + random.choice((-1, 0, 1))),
+                fill=_shade(fc, random.choice((-30, -18, 18))), width=1)
+    blend_noise(floor, .11).save(floor_path, optimize=True)
 
     metal = Image.new("RGB", (size, size), _shade(tc, -8))
     md = ImageDraw.Draw(metal)
@@ -314,7 +333,12 @@ def build_chapter_textures(chapter_index: int, style: dict) -> tuple[str, str, s
     for x in (18, size - 18):
         for y in (18, size - 18):
             md.ellipse((x - 7, y - 7, x + 7, y + 7), fill=(30, 34, 38), outline=_shade(tc, 35), width=3)
-    blend_noise(metal, .065).save(metal_path, optimize=True)
+    # Oxidation specks and rubbed metal edges.
+    for _ in range(220):
+        x, y = random.randrange(size), random.randrange(size)
+        r = random.choice((1, 2, 3))
+        md.ellipse((x-r, y-r, x+r, y+r), fill=_shade(tc, random.choice((-55, -38, -20, 28))))
+    blend_noise(metal, .09).save(metal_path, optimize=True)
     return wall_path, floor_path, metal_path
 
 
@@ -1851,6 +1875,18 @@ def update():
 # -----------------------------------------------------------------------------
 # Baslat / doku paketi olustur
 # -----------------------------------------------------------------------------
+if "--diagnostics" in sys.argv:
+    import ursina as ursina_package
+    import panda3d.core as panda_core
+    print("ECHO OF THE DEPTHS - TEKNIK BILGI")
+    print("Python:", sys.version.replace("\\n", " "))
+    print("Ursina:", getattr(ursina_package, "__version__", "surum bilgisi bulunamadi"))
+    print("Ursina konumu:", ursina_package.__file__)
+    print("Panda3D:", panda_core.PandaSystem.getVersionString())
+    print("Doku klasoru:", TEX_DIR)
+    print("Bolum sayisi:", len(CHAPTERS))
+    raise SystemExit(0)
+
 if "--generate-textures" in sys.argv:
     for texture_index, texture_style in enumerate(CHAPTERS, start=1):
         print(f"[TEXTURE] {texture_index}/5 {texture_style['name']}", flush=True)
