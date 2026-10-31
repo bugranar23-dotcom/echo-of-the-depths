@@ -1,35 +1,26 @@
 # ECHO OF THE DEPTHS
 
-Five bolumlu prosedurel 3B gerilim oyunu. Pencere hemen acilir; dokular ve sesler arka planda hazirlanir, ilk bolum yukleme ekrani sonrasi olusturulur.
+Five bolumlu prosedurel 3B gerilim oyunu.
 
 ## Kurulum
-Windows'ta `RUN_GAME.bat` dosyasina cift tikla. Baslatici Ursina/Pillow kuruluysa tekrar kurulum yapmaz; eksikse ilk acilista kurar. Elle kurulum icin:
+Windows'ta `RUN_GAME.bat` dosyasina cift tikla. Baslatici Python 3.12+ surumlerinden birini bulur, Ursina/Pillow paketlerini yalnizca eksikse kurar ve oyunu baslatir. Ilk kurulum internet gerektirir.
 
-```bash
-py -m pip install -r requirements.txt
-py Echo_of_the_Depths.py
-```
+Elle kurulum: `py -3.12 -m pip install -r requirements.txt` ve `py -3.12 Echo_of_the_Depths.py`.
+
+## Acilis duzeltmeleri
+- Ilk acilista yalnizca 1. bolumun dokulari ve sesleri hazirlanir.
+- Sonraki bolumlerin dokulari o bolume gecildiginde olusturulur.
+- Uretilen dosyalar oyunun bulundugu klasordeki `echo_assets` klasorune yazilir.
+- Hata olursa `echo_hata.txt` dosyasi ayni klasore kaydedilir.
 
 ## Kontroller
-- WASD hareket
-- SHIFT kosma
-- C cokelme
-- E etkilesim
-- F fener
-- R telsiz
-- TAB bolum/hedef durumu
-- F11 tam ekran
+WASD hareket; SHIFT kosma; C cokelme; E etkilesim; F fener; R telsiz; TAB bolum/hedef durumu; F11 tam ekran.
 
 ## Bolumler
-1. Karanlik Malikane — 5 sigorta
-2. Kapatilmis Hastane — 5 veri diski
-3. Sisli Orman Istasyonu — 5 sinyal rolesi
-4. Yeraltı Siginagi — 5 basinc vanasi
-5. Saat Kulesi — 6 saat parcasi
+1. Karanlik Malikane - 5 sigorta
+2. Kapatilmis Hastane - 5 veri diski
+3. Sisli Orman Istasyonu - 5 sinyal rolesi
+4. Yeraltı Siginagi - 5 basinc vanasi
+5. Saat Kulesi - 6 saat parcasi
 
-Her bolumde dusman daha hizli ve daha hassas olur. Yakalaninca o bolumdeki hedef ilerlemesi korunur.
-
-## Ilk acilis
-Ilk acilista oyun penceresi ve yukleme ekrani hemen gorunur. Dokular ve sesler arka planda hazirlandiktan sonra ilk bolum olusturulur. Sonraki acilislarda olusan dosyalar kullanildigi icin hazirlik daha hizli olur. `RUN_GAME.bat`, kutuphaneler zaten yuklu ise internetten tekrar kurulum yapmaz.
-
-Gereksinimler: Python 3.10+, Ursina, Pillow.
+Gereksinimler: Python 3.12+, Ursina 8.3.0, Pillow.
