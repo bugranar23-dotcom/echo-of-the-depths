@@ -1,0 +1,27 @@
+name: 3D renderer probe
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libgl1-mesa-dri libglx-mesa0 libx11-6 libxrandr2 libxrender1 libxxf86vm1 libxi6 libxext6
+          python -m pip install ursina==8.3.0 mss
+      - run: xvfb-run -a -s "-screen 0 1600x900x24" python tools/render_probe.py
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: simple-render-probe
+          path: render-probe.png
