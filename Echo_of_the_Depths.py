@@ -3,6 +3,7 @@
 # Kurulum: py -m pip install ursina pillow
 # Calistirma: py Echo_of_the_Depths.py
 # Tum dokular, sesler ve dusman modelleri oyun acilirken yerel olarak uretilir.
+# Performans: oda chunk streaming + oyuncu/kamera/yaratik yakinlik alanlari.
 
 from __future__ import annotations
 import os
@@ -297,7 +298,7 @@ spot_np.setPos(.2, -.12, .12)
 spot_np.setHpr(0, -2, 0)
 
 light_pool = []
-for index in range(6):
+for index in range(3):
     p = PandaPointLight(f"room-light-{index}")
     p.setAttenuation((1, 0, .045))
     node = scene.attachNewNode(p)
@@ -364,6 +365,15 @@ chapter_index = 0
 world_root = None
 wall_colliders: list[tuple[float, float, float, float]] = []
 furniture_colliders: list[tuple[float, float, float, float]] = []
+# Her odanin kendi sahne kok grubu: uzak odalar tek hamlede render disi kalir.
+room_nodes: list[Entity] = []
+room_active: set[int] = set()
+# Fizik/LOS kontrolleri tum haritayi taramak yerine yakin oda kovalarina bakar.
+wall_colliders_by_room: list[list[tuple[float, float, float, float]]] = []
+furniture_colliders_by_room: list[list[tuple[float, float, float, float]]] = []
+room_stream_last = -999.0
+lamp_refresh_timer = 0.0
+selected_lamps: list[tuple[float, float, float]] = []
 room_graph: list[list[int]] = []
 door_map: dict[tuple[int, int], tuple[float, float]] = {}
 room_lights: list[tuple[float, float, float]] = []
@@ -423,12 +433,18 @@ def palette_color(value):
     return value
 
 
+def static_entity(*args, **kwargs):
+    """Render geometry without adding it to Ursina's per-frame entity update list."""
+    kwargs.setdefault("add_to_scene_entities", False)
+    return Entity(*args, **kwargs)
+
+
 def make_ring(x: float, y: float, z: float, radius: float, tint, parent=None, rotation=(0, 0, 0), thickness=.075):
     """Create a ring from small spheres so no external torus model is required."""
-    group = Entity(parent=parent if parent is not None else world_root, position=(x, y, z), rotation=rotation)
+    group = static_entity(parent=parent if parent is not None else room_parent(x, z), position=(x, y, z), rotation=rotation)
     for index in range(12):
         angle = math.tau * index / 12
-        Entity(parent=group, model="sphere",
+        static_entity(parent=group, model="sphere",
                position=(math.cos(angle) * radius, 0, math.sin(angle) * radius),
                scale=(thickness, thickness, thickness), color=palette_color(tint))
     return group
@@ -448,33 +464,59 @@ def room_key(a: int, b: int) -> tuple[int, int]:
     return (a, b) if a < b else (b, a)
 
 
+def room_parent(x: float, z: float):
+    """World-space konumun ait oldugu oda chunk'i."""
+    if room_nodes:
+        return room_nodes[room_at(x, z)]
+    return world_root
+
+
+def nearby_room_ids(x: float, z: float, reach: int = 1) -> list[int]:
+    """Bir konumun etrafindaki oda indexleri (duvar sinirlari icin tamponlu)."""
+    center = room_at(x, z)
+    cx, cz = center % GRID, center // GRID
+    result = []
+    for rz in range(max(0, cz - reach), min(GRID, cz + reach + 1)):
+        for rx in range(max(0, cx - reach), min(GRID, cx + reach + 1)):
+            result.append(rz * GRID + rx)
+    return result
+
+
 def add_collider(x: float, z: float, width: float, depth: float, target=None) -> None:
-    wall_colliders.append((x, z, width / 2, depth / 2))
+    collider = (x, z, width / 2, depth / 2)
+    wall_colliders.append(collider)
+    if wall_colliders_by_room:
+        wall_colliders_by_room[room_at(x, z)].append(collider)
 
 
 def can_stand(x: float, z: float, radius: float = PLAYER_RADIUS) -> bool:
     if x < .55 or z < .55 or x > WORLD - .55 or z > WORLD - .55:
         return False
-    for cx, cz, hw, hd in wall_colliders:
-        if abs(x - cx) < hw + radius and abs(z - cz) < hd + radius:
-            return False
-    for cx, cz, hw, hd in furniture_colliders:
-        if abs(x - cx) < hw + radius and abs(z - cz) < hd + radius:
-            return False
+    room_ids = nearby_room_ids(x, z, 1)
+    for room_id in room_ids:
+        for cx, cz, hw, hd in wall_colliders_by_room[room_id]:
+            if abs(x - cx) < hw + radius and abs(z - cz) < hd + radius:
+                return False
+        for cx, cz, hw, hd in furniture_colliders_by_room[room_id]:
+            if abs(x - cx) < hw + radius and abs(z - cz) < hd + radius:
+                return False
     return True
 
 
 def add_box(x: float, y: float, z: float, sx: float, sy: float, sz: float,
             tint, texture=None, collision=False, parent=None, rotation_y=0):
-    e = Entity(parent=parent if parent is not None else world_root, model="cube", position=(x, y, z),
+    e = static_entity(parent=parent if parent is not None else room_parent(x, z), model="cube", position=(x, y, z),
                scale=(sx, sy, sz), color=palette_color(tint), texture=texture, rotation_y=rotation_y)
     if collision:
-        furniture_colliders.append((x, z, sx / 2, sz / 2))
+        collider = (x, z, sx / 2, sz / 2)
+        furniture_colliders.append(collider)
+        if furniture_colliders_by_room:
+            furniture_colliders_by_room[room_at(x, z)].append(collider)
     return e
 
 
 def add_cylinder(x: float, y: float, z: float, scale, tint, rotation=(0, 0, 0), parent=None):
-    return Entity(parent=parent if parent is not None else world_root, model=CYLINDER_MODEL, position=(x, y, z),
+    return static_entity(parent=parent if parent is not None else room_parent(x, z), model=CYLINDER_MODEL, position=(x, y, z),
                   scale=scale, color=palette_color(tint), rotation=rotation)
 
 
@@ -491,7 +533,7 @@ def make_wall_segment(axis: str, fixed: float, start: float, end: float, wall_te
         pos = (fixed, WALL_H / 2, mid)
         scale = (WALL_T, WALL_H, length)
         cx, cz, w, d = fixed, mid, WALL_T, length
-    Entity(parent=world_root, model="cube", position=pos, scale=scale,
+    static_entity(parent=room_parent(cx, cz), model="cube", position=pos, scale=scale,
            texture=wall_tex, texture_scale=(max(1, length / 2.8), WALL_H / 2.8),
            color=color.white)
     add_collider(cx, cz, w, d)
@@ -676,9 +718,9 @@ def build_lamps(style: dict):
         if rng.random() < .42:
             cx, cz = room_center(room)
             room_lights.append((cx, cz, rng.random() * 10))
-            Entity(parent=world_root, model=CYLINDER_MODEL, position=(cx, WALL_H - .15, cz),
+            static_entity(parent=room_nodes[room], model=CYLINDER_MODEL, position=(cx, WALL_H - .15, cz),
                    scale=(.72, .10, .72), color=hx("#262a2c"))
-            Entity(parent=world_root, model="sphere", position=(cx, WALL_H - .38, cz),
+            static_entity(parent=room_nodes[room], model="sphere", position=(cx, WALL_H - .38, cz),
                    scale=(.28, .12, .28), color=palette_color(style["glow"]))
 
 
@@ -693,30 +735,95 @@ def build_exit_gate(style: dict):
     add_box(cx, .88, cz - 5.15, 1.8, 1.6, .62, hx("#252c32"), collision=True)
     add_box(cx, 1.75, cz - 5.15, 1.7, .08, .58, style["trim"])
     for xoff in (-.48, 0, .48):
-        Entity(parent=world_root, model="sphere", position=(cx + xoff, 1.85, cz - 5.18), scale=.11, color=palette_color(style["glow"]))
+        static_entity(parent=room_parent(cx + xoff, cz - 5.18), model="sphere", position=(cx + xoff, 1.85, cz - 5.18), scale=.11, color=palette_color(style["glow"]))
     return (cx, cz - 4.9)
+
+
+def update_room_streaming(force: bool = False) -> None:
+    """Kameranin onundeki odalari, oyuncu yakinini ve yaratigin bolgesini yukle.
+
+    Oda geometrisi korunur; sadece uzak chunk'lar kapatilir. Boylece geri
+    donuldugunde tekrar model olusturma veya collider kaybi yasanmaz.
+    """
+    global room_stream_last, room_active
+    if not room_nodes:
+        return
+    if not force and chapter_clock - room_stream_last < 0.18:
+        return
+    room_stream_last = chapter_clock
+
+    px, pz = player.x, player.z
+    player_room = room_at(px, pz)
+    yaw = math.radians(player.rotation_y)
+    forward_x, forward_z = math.sin(yaw), math.cos(yaw)
+    # Oyuncunun hemen cevresindeki 3x3 oda guvenli tampon olarak daima acik.
+    active = set(nearby_room_ids(px, pz, 1))
+    view_range = CELL * 3.15
+    view_range_sq = view_range * view_range
+    # Kamera yonunde biraz daha ileri gorus mesafesi; yan/arka odalar uyur.
+    for room_id in range(GRID * GRID):
+        cx, cz = room_center(room_id)
+        dx, dz = cx - px, cz - pz
+        dist_sq = dx * dx + dz * dz
+        if dist_sq > view_range_sq or room_id in active:
+            continue
+        dist = math.sqrt(dist_sq)
+        if dist > 0.01:
+            dot = (dx * forward_x + dz * forward_z) / dist
+            if dot > 0.28:
+                active.add(room_id)
+
+    # Dusman hareket ettigi yerde de kendi cevresi acik kalir; uzaktaki oyuncu
+    # bolgesiyle cakismasa bile dusman kapali bir odanin icine girmez.
+    if enemy is not None and enemy.root.enabled:
+        active.update(nearby_room_ids(enemy.root.x, enemy.root.z, 1))
+
+    # Gecislerde titresemeyi onlemek icin eski chunk'lara kucuk bir tampon tanir.
+    for room_id in room_active - active:
+        cx, cz = room_center(room_id)
+        pdx, pdz = cx - px, cz - pz
+        if pdx * pdx + pdz * pdz < (CELL * 1.7) ** 2:
+            active.add(room_id)
+
+    for room_id, node in enumerate(room_nodes):
+        should_enable = room_id in active
+        if node.enabled != should_enable:
+            node.enabled = should_enable
+    room_active = active
 
 
 def build_world():
     global world_root, wall_colliders, furniture_colliders, room_lights
+    global room_nodes, room_active, wall_colliders_by_room, furniture_colliders_by_room
+    global room_stream_last, selected_lamps, lamp_refresh_timer
     if world_root is not None:
         destroy(world_root)
-    world_root = Entity()
+    world_root = static_entity(name="chapter-world")
     wall_colliders = []
     furniture_colliders = []
+    room_active = set()
+    room_stream_last = -999.0
+    selected_lamps = []
+    lamp_refresh_timer = 0.0
     style = CHAPTERS[chapter_index]
     wall_path, floor_path, metal_path = build_chapter_textures(chapter_index + 1, style)
     wall_tex = load_texture(wall_path)
     floor_tex = load_texture(floor_path)
     metal_tex = load_texture(metal_path)
     make_maze()
+    room_nodes = [
+        static_entity(parent=world_root, name=f"room_chunk_{room}", enabled=False)
+        for room in range(GRID * GRID)
+    ]
+    wall_colliders_by_room = [[] for _ in range(GRID * GRID)]
+    furniture_colliders_by_room = [[] for _ in range(GRID * GRID)]
 
-    # Zemin ve tavan: her oda farkli ton/rotasyonla kaplanir.
+    # Zemin ve tavan: her oda ayri chunk icinde tutulur.
     for room in range(GRID * GRID):
         cx, cz = room_center(room)
-        Entity(parent=world_root, model="plane", position=(cx, .015, cz), scale=(CELL, 1, CELL),
+        static_entity(parent=room_nodes[room], model="plane", position=(cx, .015, cz), scale=(CELL, 1, CELL),
                texture=floor_tex, texture_scale=(2.5, 2.5), color=color.white)
-        Entity(parent=world_root, model="plane", position=(cx, WALL_H, cz), rotation_x=180,
+        static_entity(parent=room_nodes[room], model="plane", position=(cx, WALL_H, cz), rotation_x=180,
                scale=(CELL, 1, CELL), texture=wall_tex, texture_scale=(2.5, 2.5),
                color=hx("#77716a"), double_sided=True)
         # Tavan kirişi ve koselerde kolonlar.
@@ -770,35 +877,37 @@ def build_world():
 # -----------------------------------------------------------------------------
 def build_pickup_model(kind: str, pos: tuple[float, float], style: dict):
     x, z = pos
-    root = Entity(parent=world_root, position=(x, .45, z))
+    room_id = room_at(x, z)
+    chunk = room_nodes[room_id]
+    root = static_entity(parent=chunk, position=(x, .45, z))
     tint = style["glow"]
     if kind == "sigorta":
-        Entity(parent=root, model=CYLINDER_MODEL, scale=(.20, .54, .20), color=hx("#d4a34d"))
-        Entity(parent=root, model="cube", scale=(.23, .12, .24), y=.20, color=hx("#30383a"))
-        Entity(parent=root, model="cube", scale=(.06, .14, .06), y=.33, color=hx("#f3d58d"))
+        static_entity(parent=root, model=CYLINDER_MODEL, scale=(.20, .54, .20), color=hx("#d4a34d"))
+        static_entity(parent=root, model="cube", scale=(.23, .12, .24), y=.20, color=hx("#30383a"))
+        static_entity(parent=root, model="cube", scale=(.06, .14, .06), y=.33, color=hx("#f3d58d"))
     elif kind == "disk":
-        Entity(parent=root, model=CYLINDER_MODEL, scale=(.48, .10, .48), color=hx("#a5b9b2"))
-        Entity(parent=root, model=CYLINDER_MODEL, scale=(.16, .12, .16), color=hx("#33474a"))
-        Entity(parent=root, model="sphere", scale=.07, y=.08, color=palette_color(tint))
+        static_entity(parent=root, model=CYLINDER_MODEL, scale=(.48, .10, .48), color=hx("#a5b9b2"))
+        static_entity(parent=root, model=CYLINDER_MODEL, scale=(.16, .12, .16), color=hx("#33474a"))
+        static_entity(parent=root, model="sphere", scale=.07, y=.08, color=palette_color(tint))
     elif kind == "role":
-        Entity(parent=root, model="cube", scale=(.36, .46, .22), color=hx("#526b48"))
-        Entity(parent=root, model="cube", scale=(.24, .08, .05), y=.08, z=-.13, color=palette_color(tint))
-        Entity(parent=root, model="sphere", scale=.10, y=.24, z=-.14, color=hx("#d9ecad"))
-        Entity(parent=root, model=CYLINDER_MODEL, scale=(.035, .32, .035), y=.35, color=hx("#afb9a3"))
+        static_entity(parent=root, model="cube", scale=(.36, .46, .22), color=hx("#526b48"))
+        static_entity(parent=root, model="cube", scale=(.24, .08, .05), y=.08, z=-.13, color=palette_color(tint))
+        static_entity(parent=root, model="sphere", scale=.10, y=.24, z=-.14, color=hx("#d9ecad"))
+        static_entity(parent=root, model=CYLINDER_MODEL, scale=(.035, .32, .035), y=.35, color=hx("#afb9a3"))
     elif kind == "vana":
-        Entity(parent=root, model=CYLINDER_MODEL, scale=(.17, .32, .17), color=hx("#87949b"))
+        static_entity(parent=root, model=CYLINDER_MODEL, scale=(.17, .32, .17), color=hx("#87949b"))
         make_ring(0, .10, 0, .30, tint, parent=root, thickness=.045)
         for angle in range(0, 360, 90):
             a = math.radians(angle)
-            Entity(parent=root, model="cube", scale=(.08, .34, .08),
+            static_entity(parent=root, model="cube", scale=(.08, .34, .08),
                    position=(math.sin(a) * .23, .10, math.cos(a) * .23), rotation_y=angle, color=hx("#b8c2c2"))
     else:
         make_ring(0, 0, 0, .27, tint, parent=root, thickness=.055)
-        Entity(parent=root, model=CYLINDER_MODEL, scale=(.12, .28, .12), color=hx("#b69b65"))
-        Entity(parent=root, model="cube", scale=(.08, .28, .08), rotation_z=45, color=hx("#e5ca8b"))
-    ring = make_ring(x, .05, z, .32, tint, thickness=.055)
-    glow = Entity(parent=world_root, model="sphere", position=(x, .45, z), scale=.72, color=color.rgba(tint[0], tint[1], tint[2], 28), unlit=True)
-    return {"kind": kind, "root": root, "ring": ring, "glow": glow, "x": x, "z": z, "phase": random.random() * 6}
+        static_entity(parent=root, model=CYLINDER_MODEL, scale=(.12, .28, .12), color=hx("#b69b65"))
+        static_entity(parent=root, model="cube", scale=(.08, .28, .08), rotation_z=45, color=hx("#e5ca8b"))
+    ring = make_ring(x, .05, z, .32, tint, parent=chunk, thickness=.055)
+    glow = static_entity(parent=chunk, model="sphere", position=(x, .45, z), scale=.72, color=color.rgba(tint[0], tint[1], tint[2], 28), unlit=True)
+    return {"kind": kind, "root": root, "ring": ring, "glow": glow, "x": x, "z": z, "room": room_id, "phase": random.random() * 6}
 
 
 def spawn_chapter_items(style: dict):
@@ -829,53 +938,55 @@ def spawn_chapter_items(style: dict):
     for room in battery_rooms[:max(2, 5 - chapter_index)]:
         cx, cz = room_center(room)
         x, z = cx + random.uniform(-2.1, 2.1), cz + random.uniform(-2.1, 2.1)
-        battery = Entity(parent=world_root, position=(x, .38, z))
-        Entity(parent=battery, model="cube", scale=(.26, .48, .20), color=hx("#4b956b"))
-        Entity(parent=battery, model="cube", position=(0, .26, 0), scale=(.14, .07, .21), color=hx("#b5c5a1"))
-        ring = make_ring(x, .05, z, .24, hx("#8fd4a2"), thickness=.045)
-        pickups.append({"kind": "battery", "root": battery, "ring": ring, "glow": None, "x": x, "z": z, "phase": random.random() * 6})
+        room_id = room_at(x, z)
+        chunk = room_nodes[room_id]
+        battery = static_entity(parent=chunk, position=(x, .38, z))
+        static_entity(parent=battery, model="cube", scale=(.26, .48, .20), color=hx("#4b956b"))
+        static_entity(parent=battery, model="cube", position=(0, .26, 0), scale=(.14, .07, .21), color=hx("#b5c5a1"))
+        ring = make_ring(x, .05, z, .24, hx("#8fd4a2"), parent=chunk, thickness=.045)
+        pickups.append({"kind": "battery", "root": battery, "ring": ring, "glow": None, "x": x, "z": z, "room": room_id, "phase": random.random() * 6})
 
 # -----------------------------------------------------------------------------
 # Dusman: prosedurel, detayli, animasyonlu siluet
 # -----------------------------------------------------------------------------
 class Stalker:
     def __init__(self, parent, style: dict):
-        self.root = Entity(parent=parent, enabled=False)
+        self.root = static_entity(parent=parent, enabled=False)
         self.root.position = (CELL * 1.5, 0, CELL * 1.5)
         skin = hx("#%02x%02x%02x" % style["enemy"])
         dark = hx("#202329")
         pale = hx("#b8b4a0")
-        self.hips = Entity(parent=self.root, position=(0, 1.12, 0))
-        Entity(parent=self.hips, model="sphere", scale=(.48, .28, .32), color=dark)
-        self.torso = Entity(parent=self.hips, position=(0, .37, 0))
-        Entity(parent=self.torso, model="sphere", scale=(.54, .88, .34), color=skin)
-        Entity(parent=self.torso, model="cube", scale=(.08, .78, .04), position=(0, -.02, -.19), color=dark)
+        self.hips = static_entity(parent=self.root, position=(0, 1.12, 0))
+        static_entity(parent=self.hips, model="sphere", scale=(.48, .28, .32), color=dark)
+        self.torso = static_entity(parent=self.hips, position=(0, .37, 0))
+        static_entity(parent=self.torso, model="sphere", scale=(.54, .88, .34), color=skin)
+        static_entity(parent=self.torso, model="cube", scale=(.08, .78, .04), position=(0, -.02, -.19), color=dark)
         # Kaburga benzeri katmanlar: stilize, kan/grafik unsur yok.
         for i in range(5):
-            Entity(parent=self.torso, model="cube", scale=(.43, .035, .035), position=(0, -.18 + i * .13, .17), color=pale)
-        self.head = Entity(parent=self.torso, position=(0, .72, .02))
-        Entity(parent=self.head, model="sphere", scale=(.42, .57, .40), color=skin)
-        Entity(parent=self.head, model="sphere", scale=(.33, .20, .12), position=(0, -.13, .20), color=dark)
+            static_entity(parent=self.torso, model="cube", scale=(.43, .035, .035), position=(0, -.18 + i * .13, .17), color=pale)
+        self.head = static_entity(parent=self.torso, position=(0, .72, .02))
+        static_entity(parent=self.head, model="sphere", scale=(.42, .57, .40), color=skin)
+        static_entity(parent=self.head, model="sphere", scale=(.33, .20, .12), position=(0, -.13, .20), color=dark)
         eye_tint = style["enemy_eye"]
         for sx in (-.12, .12):
-            Entity(parent=self.head, model="sphere", position=(sx, .06, .205), scale=(.075, .055, .045), color=palette_color(eye_tint), unlit=True)
+            static_entity(parent=self.head, model="sphere", position=(sx, .06, .205), scale=(.075, .055, .045), color=palette_color(eye_tint), unlit=True)
         # Omuz cikintilari ve uzun kollar.
-        self.arm_l = Entity(parent=self.torso, position=(-.32, .30, 0))
-        self.arm_r = Entity(parent=self.torso, position=(.32, .30, 0))
+        self.arm_l = static_entity(parent=self.torso, position=(-.32, .30, 0))
+        self.arm_r = static_entity(parent=self.torso, position=(.32, .30, 0))
         for arm, side in ((self.arm_l, -1), (self.arm_r, 1)):
-            Entity(parent=arm, model="sphere", scale=(.19, .24, .18), color=dark)
-            Entity(parent=arm, model="cube", position=(0, -.39, 0), scale=(.16, .72, .16), color=skin, rotation_z=side * 7)
-            Entity(parent=arm, model="sphere", position=(0, -.78, .02), scale=(.14, .16, .14), color=dark)
+            static_entity(parent=arm, model="sphere", scale=(.19, .24, .18), color=dark)
+            static_entity(parent=arm, model="cube", position=(0, -.39, 0), scale=(.16, .72, .16), color=skin, rotation_z=side * 7)
+            static_entity(parent=arm, model="sphere", position=(0, -.78, .02), scale=(.14, .16, .14), color=dark)
             for finger in range(4):
-                Entity(parent=arm, model="cube", position=((finger - 1.5) * .055, - .94, .04),
+                static_entity(parent=arm, model="cube", position=((finger - 1.5) * .055, - .94, .04),
                        scale=(.035, .28, .035), rotation_z=(finger - 1.5) * 8, color=pale)
-        self.leg_l = Entity(parent=self.hips, position=(-.15, -.12, 0))
-        self.leg_r = Entity(parent=self.hips, position=(.15, -.12, 0))
+        self.leg_l = static_entity(parent=self.hips, position=(-.15, -.12, 0))
+        self.leg_r = static_entity(parent=self.hips, position=(.15, -.12, 0))
         for leg in (self.leg_l, self.leg_r):
-            Entity(parent=leg, model="cube", position=(0, -.36, 0), scale=(.18, .75, .19), color=skin)
-            Entity(parent=leg, model="cube", position=(0, -.78, .10), scale=(.22, .18, .40), color=dark)
+            static_entity(parent=leg, model="cube", position=(0, -.36, 0), scale=(.18, .75, .19), color=skin)
+            static_entity(parent=leg, model="cube", position=(0, -.78, .10), scale=(.22, .18, .40), color=dark)
         for side in (-1, 1):
-            Entity(parent=self.torso, model="cone", position=(side * .23, .55, -.04), scale=(.14, .36, .14), rotation_z=side * 28, color=dark)
+            static_entity(parent=self.torso, model="cone", position=(side * .23, .55, -.04), scale=(.14, .36, .14), rotation_z=side * 28, color=dark)
         self.phase = 0.0
         self.state = "dormant"
         self.timer = 0.0
@@ -1049,6 +1160,7 @@ def start_chapter():
     enemy_state = "dormant"
     player.position = (CELL / 2, 0, CELL / 2)
     player.rotation_y = 0
+    update_room_streaming(force=True)
     camera.position = (0, 1.68, 0)
     camera.rotation = (0, 0, 0)
     camera_pitch = 0
@@ -1127,9 +1239,10 @@ def line_of_sight(ax: float, az: float, bx: float, bz: float) -> bool:
     for i in range(1, steps):
         x = ax + (bx - ax) * i / steps
         z = az + (bz - az) * i / steps
-        for cx, cz, hw, hd in wall_colliders:
-            if abs(x - cx) < hw and abs(z - cz) < hd:
-                return False
+        for room_id in nearby_room_ids(x, z, 1):
+            for cx, cz, hw, hd in wall_colliders_by_room[room_id]:
+                if abs(x - cx) < hw and abs(z - cz) < hd:
+                    return False
     return True
 
 
@@ -1352,7 +1465,7 @@ def begin_startup() -> None:
 def update():
     global camera_pitch, battery_charge, flashlight_on, stamina, exhausted
     global chapter_clock, toast_timer, walk_phase, step_counter, noise_level
-    global startup_queued
+    global startup_queued, lamp_refresh_timer, selected_lamps
 
     # App penceresi acilip ilk kare cizildikten sonra yuklemeyi baslat.
     if startup_assets_ready.is_set() and not startup_queued:
@@ -1430,6 +1543,7 @@ def update():
 
     # Dusman ve yakinlik efektleri.
     update_enemy(dt, sprinting)
+    update_room_streaming()
     distance = distance_to_enemy()
     threat = max(0, 1 - distance / 25) if enemy and enemy.root.enabled else 0
     if threat > .35 and random.random() < dt * (1.2 + threat * 1.8):
@@ -1439,10 +1553,16 @@ def update():
             pulse_audio.play()
 
     # Yakindaki oda isiklari; uzak odalardaki isiklar kapali kalir.
-    nearest_lamps = sorted(room_lights, key=lambda p: (p[0] - player.x) ** 2 + (p[1] - player.z) ** 2)[:6]
+    lamp_refresh_timer -= dt
+    if lamp_refresh_timer <= 0:
+        selected_lamps = sorted(
+            room_lights,
+            key=lambda p: (p[0] - player.x) ** 2 + (p[1] - player.z) ** 2,
+        )[:len(light_pool)]
+        lamp_refresh_timer = .30
     for i, (node, light) in enumerate(light_pool):
-        if i < len(nearest_lamps):
-            lx, lz, phase = nearest_lamps[i]
+        if i < len(selected_lamps):
+            lx, lz, phase = selected_lamps[i]
             d2 = (lx - player.x) ** 2 + (lz - player.z) ** 2
             if d2 < 440:
                 flicker = .72 if math.sin(chapter_clock * (23 + i) + phase) > .985 else 1.0
@@ -1460,6 +1580,8 @@ def update():
 
     # Nesnelerin hafif donmesi/parlamasi.
     for item in pickups:
+        if item.get("room") not in room_active:
+            continue
         item["phase"] += dt * 2.1
         item["root"].y = .46 + math.sin(item["phase"]) * .10
         item["root"].rotation_y += dt * 35
