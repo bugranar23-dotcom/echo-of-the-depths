@@ -521,17 +521,26 @@ def build_audio_files() -> None:
     make("pulse", .32, lambda t, d: math.sin(t * 2 * math.pi * (65 - 25 * t / d)) * (1 - t / d) ** 2)
     make("sting", .75, lambda t, d: (math.sin(t * 2 * math.pi * 110) + .5 * math.sin(t * 2 * math.pi * 58)) * (1 - t / d) ** 2)
     make("pickup", .18, lambda t, d: math.sin(t * 2 * math.pi * (720 - 400 * t / d)) * (1 - t / d))
+    make("knock", .58, lambda t, d: .78 * math.sin(t * 2 * math.pi * 74) * math.exp(-t * 8) * (1 if t < .16 else .28) + .12 * random.uniform(-1, 1) * math.exp(-t * 12))
+    make("whisper", 1.15, lambda t, d: (.22 * random.uniform(-1, 1) + .12 * math.sin(t * 2 * math.pi * 37)) * (math.sin(math.pi * t / d) ** 1.4))
+    make("jumpscare", .46, lambda t, d: (.72 * math.sin(2 * math.pi * (155 - 75 * t / d) * t) + .22 * random.uniform(-1, 1)) * (1 - t / d) ** .45)
 
 
 # Ses dosyalari ve dokular arka planda hazirlanir. Boylece pencere acilmadan
 # once uzun dosya/texture uretimi yapilip kullaniciya siyah ekran gosterilmez.
 ambience_audio = step_audio = pulse_audio = sting_audio = pickup_audio = None
+knock_audio = whisper_audio = jumpscare_audio = None
 audio_initialized = False
+scare_overlay = None
+jumpscare_timer = 0.0
+jumpscare_cooldown = 0.0
+ambient_event_timer = 18.0
 
 
 def initialize_audio() -> None:
     """Audio nesnelerini Ursina ana thread'inde guvenli sekilde yukle."""
     global ambience_audio, step_audio, pulse_audio, sting_audio, pickup_audio, audio_initialized
+    global knock_audio, whisper_audio, jumpscare_audio
     if audio_initialized:
         return
     audio_initialized = True
@@ -540,9 +549,13 @@ def initialize_audio() -> None:
         step_audio = Audio(os.path.join(SFX_DIR, "step.wav"), autoplay=False, volume=.35)
         pulse_audio = Audio(os.path.join(SFX_DIR, "pulse.wav"), autoplay=False, volume=.6)
         sting_audio = Audio(os.path.join(SFX_DIR, "sting.wav"), autoplay=False, volume=.8)
-        pickup_audio = Audio(os.path.join(SFX_DIR, "pickup.wav"), autoplay=False, volume=.6)
+        pickup_audio = Audio(os.path.join(SFX_DIR, "pickup.wav"), autoplay=False, volume=.44)
+        knock_audio = Audio(os.path.join(SFX_DIR, "knock.wav"), autoplay=False, volume=.18)
+        whisper_audio = Audio(os.path.join(SFX_DIR, "whisper.wav"), autoplay=False, volume=.15)
+        jumpscare_audio = Audio(os.path.join(SFX_DIR, "jumpscare.wav"), autoplay=False, volume=.62)
     except Exception:
         ambience_audio = step_audio = pulse_audio = sting_audio = pickup_audio = None
+        knock_audio = whisper_audio = jumpscare_audio = None
 
 # -----------------------------------------------------------------------------
 # Aydinlatma ve kamera
