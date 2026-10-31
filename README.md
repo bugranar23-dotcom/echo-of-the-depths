@@ -5,10 +5,11 @@ Five bolumlu, birinci sahis 3B gerilim oyunu.
 ## Gorsel ve doku duzeltmeleri
 - Ursina renk API'si 0-1 araligiyla calisir. 0-255 renk paletleri artik `rgb32/rgba32` ile dogru normalize edilir; duvarlarin, zeminlerin ve UI panellerinin beyaza donmesi duzeltilmistir.
 - Doku PNG'leri mutlak yol aramak yerine acik `echo_assets/textures` klasorunden yuklenir; texture nesnesi bulunamazsa acik hata verir.
-- Her bolum icin ayri v5 duvar, zemin ve metal dokulari uretilir. Ah sap damarlari, tas/seramik derzleri, beton catlaklari, kir, surtunme izleri ve metal oksitlenmesi PNG'lere onceden islenir; oyun sirasinda ek GPU maliyeti olusturmaz. v5 dosya adlari onceki dokulari otomatik yeniler.
-- Ilk acilista yalnizca 1. bolumun dokulari hazirlanir; diger bolumler bolum yuklenirken uretilir.
-- Tum dokulari onceden olusturmak icin: `py Echo_of_the_Depths.py --generate-textures`. PNG'ler `echo_assets/textures` klasorune kaydedilir.
-- Oda chunk sistemi oyuncunun yakinini, kamera onundeki alanlari ve yaraticigin cevresini etkin tutar. Statik dekorlar her kare update listesine eklenmez.
+- Her bolum icin ayri v6 ana duvar, hasarli duvar varyasyonu, zemin, tavan ve metal dokulari uretilir. Malikane soyulmus ahsap, hastane eski seramik, orman istasyonunda kabuk/yosun, siginakta catlak beton/pas, saat kulesinde koyu lake ahsap/pirinc kullanir.
+- Ilk acilista yalnizca 1. bolumun dosyalari arka planda hazirlanir; diger bolumlerin malzemeleri bolume girerken olusturulur. Tum paket dokulari onceden de olusturulabilir.
+- Tum dokulari onceden olusturmak icin: `py Echo_of_the_Depths.py --generate-textures` (bes bolumun tum malzemelerini onceden uretir). PNG'ler `echo_assets/textures` klasorune kaydedilir.
+- Bolume ozel duvar panolari, oda tabelalari, hasar detaylari, kenarlara birakilmis enkaz ve ayri tavan malzemeleri eklenir.
+- Yaratık surekli gorunmez: araliklarla ortaya cikar, oyuncuyu arar/kisa sure kovalar, sonra kaybolur. Bazi yakin karsilasmalarda kan/grafik unsur icermeyen kisa yuz parlamasi ve ses efekti calisir.
 
 ## Bes bolum
 1. **Karanlik Malikane:** 5 sigorta, renk devresi bulmacasi ve cikisa donus kovalamacasi.
@@ -31,7 +32,7 @@ py -3.12 Echo_of_the_Depths.py --generate-textures
 py -3.12 Echo_of_the_Depths.py
 ```
 
-`--diagnostics` Python, Ursina ve Panda3D surumlerini yazar. `--generate-textures` bes bolumun v5 dokularini `echo_assets/textures` klasorune yeniden olusturur.
+`--diagnostics` Python, Ursina ve Panda3D surumlerini yazar. `--generate-textures` bes bolumun v6 dokularini `echo_assets/textures` klasorune yeniden olusturur.
 
 ## Kontroller
 - WASD: hareket
