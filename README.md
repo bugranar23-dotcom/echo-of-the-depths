@@ -5,7 +5,7 @@ Five bolumlu, birinci sahis 3B gerilim oyunu.
 ## Gorsel ve doku duzeltmeleri
 - Ursina renk API'si 0-1 araligiyla calisir. 0-255 renk paletleri artik `rgb32/rgba32` ile dogru normalize edilir; duvarlarin, zeminlerin ve UI panellerinin beyaza donmesi duzeltilmistir.
 - Doku PNG'leri mutlak yol aramak yerine acik `echo_assets/textures` klasorunden yuklenir; texture nesnesi bulunamazsa acik hata verir.
-- 512x512 v4 duvar, zemin ve metal dokulari her bolum icin ayri olusturulur. Katmanli gren, yuzey yipranmasi ve ince cizikler eklenir.
+- Her bolum icin ayri v5 duvar, zemin ve metal dokulari uretilir. Ah sap damarlari, tas/seramik derzleri, beton catlaklari, kir, surtunme izleri ve metal oksitlenmesi PNG'lere onceden islenir; oyun sirasinda ek GPU maliyeti olusturmaz. v5 dosya adlari onceki dokulari otomatik yeniler.
 - Ilk acilista yalnizca 1. bolumun dokulari hazirlanir; diger bolumler bolum yuklenirken uretilir.
 - Tum dokulari onceden olusturmak icin: `py Echo_of_the_Depths.py --generate-textures`. PNG'ler `echo_assets/textures` klasorune kaydedilir.
 - Oda chunk sistemi oyuncunun yakinini, kamera onundeki alanlari ve yaraticigin cevresini etkin tutar. Statik dekorlar her kare update listesine eklenmez.
@@ -26,8 +26,12 @@ Elle kurulum:
 
 ```bash
 py -3.12 -m pip install -r requirements.txt
+py -3.12 Echo_of_the_Depths.py --diagnostics
+py -3.12 Echo_of_the_Depths.py --generate-textures
 py -3.12 Echo_of_the_Depths.py
 ```
+
+`--diagnostics` Python, Ursina ve Panda3D surumlerini yazar. `--generate-textures` bes bolumun v5 dokularini `echo_assets/textures` klasorune yeniden olusturur.
 
 ## Kontroller
 - WASD: hareket
