@@ -546,9 +546,13 @@ def room_key(a: int, b: int) -> tuple[int, int]:
 
 
 def room_parent(x: float, z: float):
-    """World-space konumun ait oldugu oda chunk'i."""
-    if room_nodes:
-        return room_nodes[room_at(x, z)]
+    """Use one world parent while rendering is stabilized.
+
+    The previous per-room parent hierarchy caused the room meshes to disappear
+    on some Panda3D backends even while their chunk nodes were enabled.
+    Keep geometry directly under the chapter root; visibility optimization can
+    be reintroduced after the renderer is verified on target machines.
+    """
     return world_root
 
 
@@ -834,10 +838,11 @@ def build_exit_gate(style: dict):
 
 
 def update_room_streaming(force: bool = False) -> None:
-    """Keep the player's visual neighborhood and the monster's neighborhood alive."""
+    """Temporarily keep the complete chapter visible while renderer is stabilized."""
     global room_stream_last, room_active
-    if not room_nodes:
-        return
+    room_active = set(range(GRID * GRID))
+    room_stream_last = chapter_clock
+    return
     if not force and chapter_clock - room_stream_last < .15:
         return
     room_stream_last = chapter_clock
