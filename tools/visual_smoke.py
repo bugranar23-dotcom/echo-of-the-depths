@@ -76,10 +76,16 @@ def main() -> None:
     if max(stats.stddev) < 8:
         fail("Captured image looks almost uniform/blank.", process)
 
-    # Confirm the frame contains more than a single flat colour.
-    sample = image.resize((160, 90))
-    if len(sample.getcolors(maxcolors=160 * 90) or []) < 20:
-        fail("Captured frame has too little visual variation.", process)
+    # Measure the actual game viewport, excluding Xvfb's black outer margins.
+    viewport = image.crop((160, 90, min(1440, image.width), min(810, image.height)))
+    pixels = list(viewport.resize((160, 90)).getdata())
+    near_white = sum(1 for r, g, b in pixels if min(r, g, b) > 242) / max(1, len(pixels))
+    if near_white > 0.72:
+        fail(f"Game viewport is still mostly blank/white ({near_white:.0%} near-white pixels).", process)
+
+    sample = viewport.resize((160, 90))
+    if len(sample.getcolors(maxcolors=160 * 90) or []) < 35:
+        fail("Game viewport has too little visual detail.", process)
 
     print(f"VISUAL SMOKE TEST PASSED: first chapter rendered to {SHOT.name}", flush=True)
     print(f"Screenshot size: {image.width}x{image.height}; colour stddev: {stats.stddev}", flush=True)
