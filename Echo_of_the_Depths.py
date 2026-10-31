@@ -155,8 +155,33 @@ os.makedirs(SFX_DIR, exist_ok=True)
 
 
 def blend_noise(img: Image.Image, amount: float = 0.12) -> Image.Image:
-    noise = Image.effect_noise(img.size, 62).convert("RGB")
-    return Image.blend(img.convert("RGB"), noise, amount).filter(ImageFilter.GaussianBlur(0.18))
+    """Layered surface grain, subtle wear and fine scratches for game-ready materials."""
+    base = img.convert("RGB")
+    coarse = Image.effect_noise((64, 64), 32).convert("L").resize(
+        base.size, Image.Resampling.BICUBIC
+    )
+    fine = Image.effect_noise(base.size, 48).convert("L")
+    layered = ImageChops.blend(coarse, fine, .62)
+    multiplier = layered.point(
+        lambda value: max(198, min(255, 232 + int((value - 128) * .18)))
+    )
+    multiplier_rgb = Image.merge("RGB", (multiplier, multiplier, multiplier))
+    weathered = ImageChops.multiply(base, multiplier_rgb)
+    result = Image.blend(base, weathered, min(.55, amount * 1.45))
+
+    overlay = Image.new("RGBA", result.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+    rng = random.Random(4100 + int(amount * 10000) + result.size[0])
+    width, height = result.size
+    for _ in range(220):
+        x, y = rng.randrange(width), rng.randrange(height)
+        end_x = min(width - 1, x + rng.randrange(5, 42))
+        end_y = max(0, min(height - 1, y + rng.randint(-2, 2)))
+        tint = ((8, 6, 5, rng.randrange(9, 25)) if rng.random() < .72
+                else (224, 207, 174, rng.randrange(8, 20)))
+        draw.line((x, y, end_x, end_y), fill=tint, width=1)
+    result = Image.alpha_composite(result.convert("RGBA"), overlay).convert("RGB")
+    return result.filter(ImageFilter.UnsharpMask(radius=.7, percent=65, threshold=3))
 
 
 def _shade(rgb, delta):
@@ -165,9 +190,9 @@ def _shade(rgb, delta):
 
 def build_chapter_textures(chapter_index: int, style: dict) -> tuple[str, str, str]:
     """Bolume gore 512px, katmanli ve tekrar edilebilir duvar/zemin/metal dokulari."""
-    wall_path = os.path.join(TEX_DIR, f"wall_{chapter_index}_v3.png")
-    floor_path = os.path.join(TEX_DIR, f"floor_{chapter_index}_v3.png")
-    metal_path = os.path.join(TEX_DIR, f"metal_{chapter_index}_v3.png")
+    wall_path = os.path.join(TEX_DIR, f"wall_{chapter_index}_v4.png")
+    floor_path = os.path.join(TEX_DIR, f"floor_{chapter_index}_v4.png")
+    metal_path = os.path.join(TEX_DIR, f"metal_{chapter_index}_v4.png")
     if all(os.path.exists(p) and os.path.getsize(p) > 12000 for p in (wall_path, floor_path, metal_path)):
         return wall_path, floor_path, metal_path
 
@@ -1824,8 +1849,15 @@ def update():
         hud_toast.text = ""
 
 # -----------------------------------------------------------------------------
-# Baslat
+# Baslat / doku paketi olustur
 # -----------------------------------------------------------------------------
+if "--generate-textures" in sys.argv:
+    for texture_index, texture_style in enumerate(CHAPTERS, start=1):
+        print(f"[TEXTURE] {texture_index}/5 {texture_style['name']}", flush=True)
+        build_chapter_textures(texture_index, texture_style)
+    print(f"[TEXTURE] Tum bolum dokulari hazir: {TEX_DIR}", flush=True)
+    raise SystemExit(0)
+
 try:
     # Yalnizca ilk bolum varliklari arka planda hazirlanir. Pencere hemen gorunur.
     asset_thread = threading.Thread(
