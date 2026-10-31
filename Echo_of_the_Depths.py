@@ -1301,36 +1301,59 @@ def build_pickup_model(kind: str, pos: tuple[float, float], style: dict):
     x, z = pos
     room_id = room_at(x, z)
     chunk = room_nodes[room_id]
-    root = static_entity(parent=chunk, position=(x, .45, z))
+    root = static_entity(parent=chunk, position=(x, .22, z))
     tint = style["glow"]
+    dark_metal = hx("#20272a")
+    worn_metal = hx("#70736b")
     if kind == "sigorta":
-        static_entity(parent=root, model=CYLINDER_MODEL, scale=(.20, .54, .20), color=hx("#d4a34d"))
-        static_entity(parent=root, model="cube", scale=(.23, .12, .24), y=.20, color=hx("#30383a"))
-        static_entity(parent=root, model="cube", scale=(.06, .14, .06), y=.33, color=hx("#f3d58d"))
+        # Glass fuse with worn brass end caps and a visible filament.
+        static_entity(parent=root, model=CYLINDER_MODEL, scale=(.13, .42, .13), color=hx("#927343"))
+        static_entity(parent=root, model=CYLINDER_MODEL, scale=(.17, .09, .17), y=-.22, color=worn_metal)
+        static_entity(parent=root, model=CYLINDER_MODEL, scale=(.17, .09, .17), y=.22, color=worn_metal)
+        static_entity(parent=root, model="cube", scale=(.035, .26, .035), y=.01, color=hx("#d5b77a"))
     elif kind == "disk":
-        static_entity(parent=root, model=CYLINDER_MODEL, scale=(.48, .10, .48), color=hx("#a5b9b2"))
-        static_entity(parent=root, model=CYLINDER_MODEL, scale=(.16, .12, .16), color=hx("#33474a"))
-        static_entity(parent=root, model="sphere", scale=.07, y=.08, color=palette_color(tint))
+        # Old black archive platter with recessed centre and label window.
+        static_entity(parent=root, model=CYLINDER_MODEL, scale=(.43, .075, .43), color=dark_metal)
+        static_entity(parent=root, model=CYLINDER_MODEL, scale=(.24, .082, .24), color=hx("#87908c"))
+        static_entity(parent=root, model=CYLINDER_MODEL, scale=(.11, .09, .11), color=hx("#262d31"))
+        static_entity(parent=root, model="cube", scale=(.18, .016, .065), position=(.17, .048, -.04), color=hx("#a9a18a"))
+        static_entity(parent=root, model="sphere", scale=.035, y=.055, color=palette_color(tint), unlit=True)
     elif kind == "role":
-        static_entity(parent=root, model="cube", scale=(.36, .46, .22), color=hx("#526b48"))
-        static_entity(parent=root, model="cube", scale=(.24, .08, .05), y=.08, z=-.13, color=palette_color(tint))
-        static_entity(parent=root, model="sphere", scale=.10, y=.24, z=-.14, color=hx("#d9ecad"))
-        static_entity(parent=root, model=CYLINDER_MODEL, scale=(.035, .32, .035), y=.35, color=hx("#afb9a3"))
+        # Field radio relay with a short aerial and three indicators.
+        static_entity(parent=root, model="cube", scale=(.32, .40, .20), color=hx("#303d32"))
+        static_entity(parent=root, model="cube", scale=(.24, .08, .04), y=.10, z=-.12, color=hx("#7d806a"))
+        static_entity(parent=root, model="cube", scale=(.045, .28, .045), y=.31, x=.10, color=worn_metal)
+        for k in range(3):
+            static_entity(parent=root, model="sphere", scale=.035,
+                          position=(-.075 + k*.075, .12, -.13),
+                          color=palette_color(tint) if k == 1 else hx("#5c6055"))
+        static_entity(parent=root, model="cube", scale=(.08, .08, .08), y=-.22, z=.04, color=dark_metal)
     elif kind == "vana":
-        static_entity(parent=root, model=CYLINDER_MODEL, scale=(.17, .32, .17), color=hx("#87949b"))
-        make_ring(0, .10, 0, .30, tint, parent=root, thickness=.045)
+        # Heavy valve assembly with four spokes.
+        static_entity(parent=root, model=CYLINDER_MODEL, scale=(.15, .32, .15), color=worn_metal)
+        make_ring(0, .12, 0, .28, worn_metal, parent=root, thickness=.045)
         for angle in range(0, 360, 90):
             a = math.radians(angle)
-            static_entity(parent=root, model="cube", scale=(.08, .34, .08),
-                   position=(math.sin(a) * .23, .10, math.cos(a) * .23), rotation_y=angle, color=hx("#b8c2c2"))
+            static_entity(parent=root, model="cube", scale=(.065, .34, .07),
+                          position=(math.sin(a)*.22, .12, math.cos(a)*.22),
+                          rotation_y=angle, color=hx("#89918e"))
+        static_entity(parent=root, model=CYLINDER_MODEL, scale=(.26, .07, .26), y=-.17, color=dark_metal)
     else:
-        make_ring(0, 0, 0, .27, tint, parent=root, thickness=.055)
-        static_entity(parent=root, model=CYLINDER_MODEL, scale=(.12, .28, .12), color=hx("#b69b65"))
-        static_entity(parent=root, model="cube", scale=(.08, .28, .08), rotation_z=45, color=hx("#e5ca8b"))
-    ring = make_ring(x, .05, z, .32, tint, parent=chunk, thickness=.055)
-    glow = static_entity(parent=chunk, model="sphere", position=(x, .45, z), scale=.72, color=color.rgba32(tint[0], tint[1], tint[2], 28), unlit=True)
-    return {"kind": kind, "root": root, "ring": ring, "glow": glow, "x": x, "z": z, "room": room_id, "phase": random.random() * 6}
+        # Brass gear / clock pinion with six teeth.
+        make_ring(0, 0, 0, .25, hx("#a98b54"), parent=root, thickness=.055)
+        static_entity(parent=root, model=CYLINDER_MODEL, scale=(.13, .12, .13), color=dark_metal)
+        for angle in range(0, 360, 60):
+            a = math.radians(angle)
+            static_entity(parent=root, model="cube", scale=(.09, .12, .07),
+                          position=(math.sin(a)*.27, 0, math.cos(a)*.27),
+                          rotation_y=angle, color=hx("#b69b65"))
+        static_entity(parent=root, model="cube", scale=(.045, .30, .045), rotation_z=45, color=hx("#d0b477"))
 
+    ring = make_ring(x, .025, z, .22, tint, parent=chunk, thickness=.035)
+    glow = static_entity(parent=chunk, model="sphere", position=(x, .22, z), scale=.42,
+                         color=color.rgba32(tint[0], tint[1], tint[2], 14), unlit=True)
+    return {"kind": kind, "root": root, "ring": ring, "glow": glow,
+            "x": x, "z": z, "room": room_id, "phase": random.random() * 6}
 
 def spawn_chapter_items(style: dict):
     global pickups
@@ -1375,9 +1398,9 @@ class Stalker:
     def __init__(self, parent, style: dict):
         self.root = static_entity(parent=parent, enabled=False)
         self.root.position = (CELL * 1.5, 0, CELL * 1.5)
-        skin = hx("#%02x%02x%02x" % style["enemy"])
-        dark = hx("#202329")
-        pale = hx("#b8b4a0")
+        skin = hx("#%02x%02x%02x" % tuple(max(0, int(channel * .62)) for channel in style["enemy"]))
+        dark = hx("#090d10")
+        pale = hx("#42463f")
         self.hips = static_entity(parent=self.root, position=(0, 1.12, 0))
         static_entity(parent=self.hips, model="sphere", scale=(.48, .28, .32), color=dark)
         self.torso = static_entity(parent=self.hips, position=(0, .37, 0))
@@ -1387,11 +1410,12 @@ class Stalker:
         for i in range(5):
             static_entity(parent=self.torso, model="cube", scale=(.43, .035, .035), position=(0, -.18 + i * .13, .17), color=pale)
         self.head = static_entity(parent=self.torso, position=(0, .72, .02))
-        static_entity(parent=self.head, model="sphere", scale=(.42, .57, .40), color=skin)
-        static_entity(parent=self.head, model="sphere", scale=(.33, .20, .12), position=(0, -.13, .20), color=dark)
+        static_entity(parent=self.head, model="sphere", scale=(.34, .65, .34), color=skin)
+        static_entity(parent=self.head, model="sphere", scale=(.28, .20, .10), position=(0, -.17, .19), color=dark)
+        static_entity(parent=self.head, model="cube", scale=(.045, .46, .045), position=(0, -.32, .22), color=dark)
         eye_tint = style["enemy_eye"]
         for sx in (-.12, .12):
-            static_entity(parent=self.head, model="sphere", position=(sx, .06, .205), scale=(.075, .055, .045), color=palette_color(eye_tint), unlit=True)
+            static_entity(parent=self.head, model="sphere", position=(sx, .08, .205), scale=(.052, .038, .032), color=palette_color(eye_tint), unlit=True)
         # Omuz cikintilari ve uzun kollar.
         self.arm_l = static_entity(parent=self.torso, position=(-.32, .30, 0))
         self.arm_r = static_entity(parent=self.torso, position=(.32, .30, 0))
@@ -2225,11 +2249,11 @@ def update():
     for item in pickups:
         if item.get("room") not in room_active:
             continue
-        item["phase"] += dt * 2.1
-        item["root"].y = .46 + math.sin(item["phase"]) * .10
-        item["root"].rotation_y += dt * 35
-        item["ring"].rotation_y += dt * 32
-        scale = .62 + math.sin(item["phase"] * 1.7) * .05
+        item["phase"] += dt * 1.15
+        item["root"].y = .22 + math.sin(item["phase"]) * .025
+        item["root"].rotation_y += dt * 10
+        item["ring"].rotation_y += dt * 8
+        scale = .92 + math.sin(item["phase"] * 1.4) * .035
         item["ring"].scale = scale
 
     update_interactions()
